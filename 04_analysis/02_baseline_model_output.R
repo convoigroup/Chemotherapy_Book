@@ -9,17 +9,14 @@ library(colorspace)
 source("04_analysis/01_model_run.R")
 
 ### Mean costs and effects
-mean_costs_effects <- apply(m_costs_effects, 2, mean)
-tab_mean_costs_effects <- matrix(mean_costs_effects, nrow = 2, ncol = 2)
-colnames(tab_mean_costs_effects) <- c("Costs", "Effects")
-rownames(tab_mean_costs_effects) <- c("Treatment 1", "Treatment 2")
-write.csv(tab_mean_costs_effects, "07_tables/Mean_Costs_Effects.csv")
+mean_costs_effects <- apply(m_costs_effects, c(2, 3), mean)
+write.csv(mean_costs_effects, "07_tables/Mean_Costs_Effects.csv")
 
 ### Incremental Cost-Effectiveness Ratio (ICER)
-ICER <- mean(m_costs_effects[, c("cost1")] - m_costs_effects[, c("cost2")]) / 
-  mean(m_costs_effects[, c("eff1")] - m_costs_effects[, c("eff2")])
+ICER <- mean(m_costs_effects[, 1, 2] - m_costs_effects[, 2, 2]) / 
+  mean(m_costs_effects[, 1, 1] - m_costs_effects[, 2, 1])
 ICER
-write.csv(tab_mean_costs_effects, "07_tables/ICER.csv")
+write.csv(ICER, "07_tables/ICER.csv")
 
 ### Cost-Effectiveness Acceptability Curve
 colours <- rainbow_hcl(12)
@@ -64,10 +61,9 @@ baseline_wtp <- which(wtp_seq == 20000)
 mean_net_benefit <- apply(m_net_benefit[, , baseline_wtp], 2, mean)
 mean_net_benefit
 names(mean_net_benefit) <- c("Treatment 1", "Treatment 2")
-write.csv(tab_mean_costs_effects, "07_tables/Mean_Net_Benefit.csv")
+write.csv(mean_net_benefit, "07_tables/Mean_Net_Benefit.csv")
 
 # Optimal treatment
 d_star <-  which.max(mean_net_benefit)
 d_star
-
 

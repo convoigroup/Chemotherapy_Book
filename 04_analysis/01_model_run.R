@@ -17,22 +17,18 @@ n_psa_size <- 5000
 m_params <- generate_psa_parameters(n_psa_size)
 
 ### Run the model
-m_costs_effects <- array(NA, dim = c(n_psa_size, 4))
+m_costs_effects <- array(NA, dim = c(n_psa_size, 2, 2))
 for(s in 1:n_psa_size){
   v_params <- m_params[s, ]
-  v_params <- c(v_params, 
-                n_population = n_population, 
-                time_horizon = time_horizon)
-
-  m_costs_effects[s, ] <- do.call(calculate_costs_effects,
+  m_costs_effects[s, , ] <- do.call(calculate_costs_effects,
                                   v_params[names(formals(calculate_costs_effects))])
 }
 
 # Set the column names for the output
-colnames(m_costs_effects) <- names(
+dimnames(m_costs_effects)[2:3] <- dimnames(
   do.call(calculate_costs_effects,
           v_params[names(formals(calculate_costs_effects))])
-  )
+  )[2:3]
 
 # Estimate net benefit for different willingness-to-pay values
 n_wtp <- 51

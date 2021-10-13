@@ -16,11 +16,6 @@ generate_psa_parameters <- function(n){
   # Probability of side effects under treatment 2
   p_side_effects_t2 <- rr_side_effects * p_side_effects_t1
 
-  # Predictive distribution of the number of side effects
-  n_side_effects_pred_t1 <- rbinom(n, n_population, p_side_effects_t1)
-  n_side_effects_pred_t2 <- rbinom(n, n_population, p_side_effects_t2)
-
-  
   ## Variables to define transition probabilities
   # Probability that a patient is hospitalised over the time horizon
   p_hospitalised_total <- rbeta(n, 
@@ -28,14 +23,14 @@ generate_psa_parameters <- function(n){
                                 1 + n_side_effects - n_hospitalised)
   # Probability that a patient dies over the time horizon given they were 
   # hostpialised
-  p_died <- rbeta(n, 1 + n_died, 4 + p_hospitalised_total - n_died)
+  p_died <- rbeta(n, 1 + n_died, 1 + n_hospitalised - n_died)
   # Lambda_home: Conditional probability that a patient recovers considering 
   # that they are not hospitalised
-  betapars <- betaPar(0.45, 0.02)
+  betapars <- betaPar(0.21, 0.03)
   lambda_home <- rbeta(n, betapars$alpha, betapars$beta)
   # Lambda_hosp: Conditional probability that a patient recovers considering 
   # that they do not die
-  betapars <- betaPar(0.35, 0.02)
+  betapars <- betaPar(0.03, 0.0065)
   lambda_hosp <- rbeta(n, betapars$alpha, betapars$beta)
   
   ## Transition Probabilities
@@ -64,14 +59,12 @@ generate_psa_parameters <- function(n){
   
   # Specify a matrix containing all the parameters
   params_matrix <- data.frame(
-    n_side_effects_pred_t1,
-    n_side_effects_pred_t2,
+    p_side_effects_t1, 
+    p_side_effects_t2,
     p_home_hospital, p_home_home, p_home_recover,
     p_hospital_hospital, p_hospital_recover, p_hospital_dead, 
     c_home_care, c_hospital, c_death,
     u_recovery, u_home_care, u_hospital,
-    p_side_effects_t1, 
-    p_side_effects_t2,
     rr_side_effects,
     p_hospitalised_total, p_died,
     lambda_home, lambda_hosp)
@@ -82,11 +75,10 @@ generate_psa_parameters <- function(n){
 ## Function to calculate average time each patient with adverse events spends
 ## in the health states of the Markov model
 calculate_state_occupancy_markov_model <- function(
-  n_side_effects_pred_t1, 
-  n_side_effects_pred_t2,
+  p_side_effects_t1, 
+  p_side_effects_t2,
   p_home_home, p_home_hospital, p_home_recover,
-  p_hospital_hospital, p_hospital_recover, p_hospital_dead,
-  time_horizon)
+  p_hospital_hospital, p_hospital_recover, p_hospital_dead)
   # All function arguments come from the generate_psa_parameters function except
   # time_horizon which is a model assumption
 { 
@@ -103,7 +95,7 @@ calculate_state_occupancy_markov_model <- function(
   ## number of treatment options
   trace <- array(0, dim = c(4, time_horizon + 1, 2)) 
   # Initialise with the predicted number of side effects in the population
-  trace[1, 1, ] <- c(n_side_effects_pred_t1,n_side_effects_pred_t2)
+  trace[1, 1, ] <- c(p_side_effects_t1, p_side_effects_t2)
   
   # Run the markove model over the time horizon
   for(i in 2:(time_horizon + 1)){   
@@ -116,28 +108,24 @@ calculate_state_occupancy_markov_model <- function(
 
 ## Function to calculate the costs and effects from our model
 calculate_costs_effects <- function(
-  n_side_effects_pred_t1, 
-  n_side_effects_pred_t2,
+  p_side_effects_t1, 
+  p_side_effects_t2,
   p_home_home, p_home_hospital, p_home_recover,
   p_hospital_hospital, p_hospital_recover, p_hospital_dead,
   c_home_care, c_hospital, c_death,
-  u_recovery, u_home_care, u_hospital,
-  time_horizon,
-  n_population)
-  # All function arguments come from the generate_psa_parameters function except
-  # time_horizon which is a model assumption
+  u_recovery, u_home_care, u_hospital)
+  # All function arguments come from the generate_psa_parameters function
 {
   # Calculate the trace matrix from the markov model function
   m_markov_trace <- calculate_state_occupancy_markov_model(
-    n_side_effects_pred_t1,
-    n_side_effects_pred_t2,
+    p_side_effects_t1,
+    p_side_effects_t2,
     p_home_home, p_home_hospital, p_home_recover,
-    p_hospital_hospital, p_hospital_recover, p_hospital_dead,
-    time_horizon)
+    p_hospital_hospital, p_hospital_recover, p_hospital_dead)
   
   ## costs and effectiveness for four states
   c_state_vector <- c(c_home_care, c_hospital, 0, 0)
-  u_state_vector <- c(u_recovery, u_home_care, u_hospital, 0)
+  u_state_vector <- c(u_home_care, u_hospital, u_recovery, 0)
   
   ## Estimate the cost of side effects from the Markov model
   c_side_effects <- array(NA, dim = 2)
@@ -145,11 +133,9 @@ calculate_costs_effects <- function(
   ## Average cost for both Soc and novel treatment per person
   ## (The cost includes one-off cost of death for all patients who died)
   c_side_effects[1] <- (sum(c_state_vector %*% m_markov_trace[, , 1]) + 
-                          c_death * m_markov_trace[4, time_horizon + 1, 1])/
-    n_population 
+                          c_death * m_markov_trace[4, time_horizon + 1, 1])
   c_side_effects[2] <- (sum(c_state_vector %*% m_markov_trace[, , 2]) + 
-                c_death * m_markov_trace[4, time_horizon + 1, 2])/
-    n_population 
+                c_death * m_markov_trace[4, time_horizon + 1, 2])
   c_drug <- c(c_treatment_1, c_treatment_2)
   c_overall <- c(c_drug + c_side_effects)
   
@@ -158,34 +144,32 @@ calculate_costs_effects <- function(
   u_side_effects[1] <- sum(u_state_vector %*% m_markov_trace[,,1])
   u_side_effects[2] <- sum(u_state_vector %*% m_markov_trace[,,2])
   ## QALY of total number of patients who do not experience adverse events for 15 days
-  n_no_side_effects <- n_population - 
-                          c(n_side_effects_pred_t1,
-                            n_side_effects_pred_t2)
-  u_no_side_effects <-  n_no_side_effects * u_recovery * (time_horizon + 1)
+  p_no_side_effects <- 1 - 
+                          c(p_side_effects_t1,
+                            p_side_effects_t2)
+  u_no_side_effects <-  p_no_side_effects * u_recovery * (time_horizon + 1)
   
   ## Average effect for both Soc and novel treatment per person
-  u_overall <- c(u_side_effects + u_no_side_effects)/
-    n_population           
+  u_overall <- c(u_side_effects + u_no_side_effects)
   
   names(c_overall) <- paste0("cost",seq_along(c_overall))
   names(u_overall) <- paste0("eff",seq_along(u_overall))
+  output <- array(NA, dim = c(1, length(u_overall), 2),
+                  dimnames = list(NA, c("SoC", "Novel"),
+                                  c("Effects", "Costs")))
+  output[1, , 1] <- u_overall
+  output[1, , 2] <- c_overall
   
-  return(c(c_overall, u_overall))
+  return(output)
 }
 
 calculate_net_benefit <- function(
   costs_effects,
   wtp)
 {
-
-  if(is.null(dim(costs_effects))){
-    nb <- wtp * costs_effects[c("eff1","eff2")] - 
-      costs_effects[c("cost1","cost2")]
-    }
-
     if(!is.null(dim(costs_effects))){
-      nb <- wtp * costs_effects[, c("eff1","eff2")] - 
-        costs_effects[, c("cost1","cost2")]
+      nb <- wtp * costs_effects[, , 1] - 
+        costs_effects[, , 2]
     }
 
   return(nb)

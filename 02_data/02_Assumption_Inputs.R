@@ -3,24 +3,21 @@
 ################################################################################
 
 ## Time Horizon
-time_horizon <- 20
-
-## Number of Patients in the patient population
-n_population <- 1000
+time_horizon <- 50
 
 ## Parameters for the PSA distribution of the risk reduction of side effects
-rr_side_effects_mu <- 0.81
+rr_side_effects_mu <- 0.67
 rr_side_effects_sd <- 0.2
 
 ## Parameters for the PSA distribution of the recovery time for patients who are
 ## not hospitalised
-t_recovery_home_mu <- 0.35
-t_recovery_home_sd <- sqrt(0.058)
+t_recovery_home_mu <- 5.3
+t_recovery_home_sd <- sqrt(1.7)
 
 ## Parameters for the PSA distribution of the recovery time for patients who are
 ## hospitalised
-t_recovery_hosp_mu <- 0.28
-t_recovery_hosp_sd <- sqrt(0.052)
+t_recovery_hosp_mu <- 7.6
+t_recovery_hosp_sd <- sqrt(3.5)
 
 ## Parameters for the PSA distribution of the costs of treating patients at home
 c_home_care_mu <- 830
