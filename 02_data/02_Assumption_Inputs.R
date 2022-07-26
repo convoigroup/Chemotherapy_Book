@@ -6,8 +6,8 @@
 time_horizon <- 50
 
 ## Parameters for the PSA distribution of the risk reduction of side effects
-rr_side_effects_mu <- 0.67
-rr_side_effects_sd <- 0.2
+logor_side_effects_mu <- log(0.54)
+logor_side_effects_sd <- 0.3
 
 ## Parameters for the PSA distribution of the recovery time for patients who are
 ## not hospitalised

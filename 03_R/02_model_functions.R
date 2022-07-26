@@ -11,10 +11,15 @@ generate_psa_parameters <- function(n){
                              1 + n_side_effects, 
                              1 + n_patients - n_side_effects)
   
-  # Relative risk of side effects on treatment 2
-  rr_side_effects <- rnorm(n, rr_side_effects_mu, rr_side_effects_sd)
+  # Log odds of side effects on treatment 2
+  logor_side_effects <- rnorm(n, rr_side_effects_mu, rr_side_effects_sd)
+  # Odds of side effects on treatment 1
+  odds_side_effects_t1 <- p_side_effects_t1 / (1 - p_side_effects_t1)
+  # Odds for side effects on treatment 2
+  odds_side_effects_t2 <- odds_side_effects_t1 * exp(logor_side_effects)
+
   # Probability of side effects under treatment 2
-  p_side_effects_t2 <- rr_side_effects * p_side_effects_t1
+  p_side_effects_t2    <- odds_side_effects_t2 / (1 + odds_side_effects_t2)
 
   ## Variables to define transition probabilities
   # Probability that a patient is hospitalised over the time horizon
@@ -22,7 +27,7 @@ generate_psa_parameters <- function(n){
                                 1 + n_hospitalised, 
                                 1 + n_side_effects - n_hospitalised)
   # Probability that a patient dies over the time horizon given they were 
-  # hostpialised
+  # hospitalised
   p_died <- rbeta(n, 1 + n_died, 1 + n_hospitalised - n_died)
   # Lambda_home: Conditional probability that a patient recovers considering 
   # that they are not hospitalised
