@@ -118,9 +118,18 @@ calculate_costs_effects <- function(
   p_home_home, p_home_hospital, p_home_recover,
   p_hospital_hospital, p_hospital_recover, p_hospital_dead,
   c_home_care, c_hospital, c_death,
-  u_recovery, u_home_care, u_hospital)
+  u_recovery, u_home_care, u_hospital,
+  logor_side_effects)
   # All function arguments come from the generate_psa_parameters function
 {
+  # Calculate p_side_effects_2 from odds ratio
+  # Odds of side effects on treatment 1
+  odds_side_effects_t1 <- p_side_effects_t1 / (1 - p_side_effects_t1)
+  # Odds for side effects on treatment 2
+  odds_side_effects_t2 <- odds_side_effects_t1 * exp(logor_side_effects)
+  
+  # Probability of side effects under treatment 2
+  p_side_effects_t2    <- odds_side_effects_t2 / (1 + odds_side_effects_t2)
   # Calculate the trace matrix from the markov model function
   m_markov_trace <- calculate_state_occupancy_markov_model(
     p_side_effects_t1,
@@ -159,11 +168,11 @@ calculate_costs_effects <- function(
   
   names(c_overall) <- paste0("cost",seq_along(c_overall))
   names(u_overall) <- paste0("eff",seq_along(u_overall))
-  output <- array(NA, dim = c(1, length(u_overall), 2),
-                  dimnames = list(NA, c("SoC", "Novel"),
+  output <- array(NA, dim = c(length(u_overall), 2),
+                  dimnames = list(c("SoC", "Novel"),
                                   c("Effects", "Costs")))
-  output[1, , 1] <- u_overall
-  output[1, , 2] <- c_overall
+  output[1, ] <- u_overall
+  output[2, ] <- c_overall
   
   return(output)
 }

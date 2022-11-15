@@ -13,8 +13,8 @@ source("04_analysis/02_baseline_model_output.R")
 # The output from the cost-effectiveness model should be formatted for 
 # the voi package.
 # Use BCEA package to create a cost-effectiveness object.
-chemotherapy_output <- list(e = m_costs_effects[, , "Effects"],
-                            c = m_costs_effects[, , "Costs"],
+chemotherapy_output <- list(e = m_costs_effects[, "Effects", ],
+                            c = m_costs_effects[, "Costs", ],
                             k = seq(0, 50000, length.out = 501))
 
 # EVPI
