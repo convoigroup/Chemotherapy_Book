@@ -38,14 +38,6 @@ generate_psa_parameters <- function(n){
   betapars <- betaPar(p_recovery_hosp_mu, p_recovery_hosp_sd)
   lambda_hosp <- rbeta(n, betapars$alpha, betapars$beta)
   
-  ## Transition Probabilities
-  p_home_hospital <- 1 - (1 - p_hospitalised_total) ^ (1 / time_horizon)
-  p_home_home <- (1 - lambda_home) * (1 - p_home_hospital)
-  p_home_recover <- lambda_home * (1 - p_home_hospital)
-  p_hospital_dead <- 1 - (1 - p_died) ^ (1 / time_horizon)
-  p_hospital_hospital <- (1 - lambda_hosp) * (1 - p_hospital_dead)
-  p_hospital_recover <- lambda_hosp * (1 - p_hospital_dead)
-  
   ## Health State Costs
   lnpars <- lognPar(c_home_care_mu, c_home_care_sd)
   c_home_care <- rlnorm(n, lnpars$meanlog, lnpars$sdlog)
@@ -66,8 +58,6 @@ generate_psa_parameters <- function(n){
   params_matrix <- data.frame(
     p_side_effects_t1, 
     p_side_effects_t2,
-    p_home_hospital, p_home_home, p_home_recover,
-    p_hospital_hospital, p_hospital_recover, p_hospital_dead, 
     c_home_care, c_hospital, c_death,
     u_recovery, u_home_care, u_hospital,
     logor_side_effects,
@@ -115,8 +105,8 @@ calculate_state_occupancy_markov_model <- function(
 calculate_costs_effects <- function(
   p_side_effects_t1, 
   p_side_effects_t2,
-  p_home_home, p_home_hospital, p_home_recover,
-  p_hospital_hospital, p_hospital_recover, p_hospital_dead,
+  p_hospitalised_total, p_died,
+  lambda_home, lambda_hosp,
   c_home_care, c_hospital, c_death,
   u_recovery, u_home_care, u_hospital,
   logor_side_effects)
@@ -130,6 +120,15 @@ calculate_costs_effects <- function(
   
   # Probability of side effects under treatment 2
   p_side_effects_t2    <- odds_side_effects_t2 / (1 + odds_side_effects_t2)
+  
+  ## Transition Probabilities
+  p_home_hospital <- 1 - (1 - p_hospitalised_total) ^ (1 / time_horizon)
+  p_home_home <- (1 - lambda_home) * (1 - p_home_hospital)
+  p_home_recover <- lambda_home * (1 - p_home_hospital)
+  p_hospital_dead <- 1 - (1 - p_died) ^ (1 / time_horizon)
+  p_hospital_hospital <- (1 - lambda_hosp) * (1 - p_hospital_dead)
+  p_hospital_recover <- lambda_hosp * (1 - p_hospital_dead)
+  
   # Calculate the trace matrix from the markov model function
   m_markov_trace <- calculate_state_occupancy_markov_model(
     p_side_effects_t1,

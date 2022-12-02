@@ -18,17 +18,25 @@ chemotherapy_output <- list(e = m_costs_effects[, "Effects", ],
                             c = m_costs_effects[, "Costs", ],
                             k = seq(0, 50000, length.out = 501))
 
-#### Randomised Trial for Log-Odds ratio ####
+## EVSI Calculations
+#### STUDY 1: Randomised Trial for Log-Odds ratio ####
+## Using the default trials in the voi package
+
+# A randomised trial for binary outcomes requires a beta prior distribution
+# Beta prior for standard care is set using the number of events
 beta_params_t1 <- c(1 + n_side_effects, 
                     1 + n_patients - n_side_effects)
+# Beta prior for the novel intervention is approximated from the mean and 
+# standard deviation of the PA distribution for the probability of side effects.
 beta_params_t2 <- betaPar(mean(m_params$p_side_effects_t2),
         sd(m_params$p_side_effects_t2))
 
+# EVSI calculation with moment matching method
 evsi_default <- evsi(outputs = chemotherapy_output,
                      inputs = m_params,
                      study = "trial_binary",
                      pars = c("p_side_effects_t1", "p_side_effects_t2"),
-                     n = seq(500, 1500, by = 20),
+                     n = seq(500, 1500, by = 200),
                      method = "mm",
                      model_fn = calculate_costs_effects,
                      analysis_args = list(a1 = beta_params_t1[1],
@@ -37,8 +45,8 @@ evsi_default <- evsi(outputs = chemotherapy_output,
                                           b2 = beta_params_t2$beta),
                      par_fn = generate_psa_parameters)
 
-debug(evsi)
-### Written Out ###
+# Using a bespoke analysis function - trial only updates odds ratio.
+# Data generation function
 OR_datagen_fn <- function(inputs, n = 500){
   p_side_effects_t1 <- inputs[, "p_side_effects_t1"]
   p_side_effects_t2 <- inputs[, "p_side_effects_t2"]
@@ -48,7 +56,7 @@ OR_datagen_fn <- function(inputs, n = 500){
   return(data_save)
 }
 
-### HAD TO LEAVE OUT THE n ARGS - NEED TO BE ABLE TO HAVE n IN CHECK_ANALYSIS_FUN.
+# Analysis function based on JAGS
 OR_analysis_fn <- function(data, args, pars){
   X1 <- data$X1
   X2 <- data$X2
@@ -94,6 +102,7 @@ OR_analysis_fn <- function(data, args, pars){
     n.thin = 1, 
     n.burnin = 250, progress.bar = "none") 
   
+  # Resample treatment 1 from the prior as study will not updated t1
   resample_t1 <- rbeta(length(bugs.data$BUGSoutput$sims.matrix[, pars[2]]),
                        1 + args$n_side_effects,
                        1 + args$n_patients - args$n_side_effects)
@@ -102,18 +111,17 @@ OR_analysis_fn <- function(data, args, pars){
          p_side_effects_t2 = bugs.data$BUGSoutput$sims.matrix[, pars[2]]))
 }
 
-
-
-
+# EVSI calculation using the momemt matching method.
 evsi_OR <- evsi(outputs = chemotherapy_output,
                 inputs = m_params,
                 pars = c("p_side_effects_t1", "p_side_effects_t2"),
-                n = seq(500, 1500, by = 20),
+                n = seq(500, 1500, by = 200),
                 method = "mm",
                 datagen_fn = OR_datagen_fn,
                 model_fn = calculate_costs_effects,
                 analysis_args = list(n_side_effects = n_side_effects,
                                      n_patients = n_patients,
+                                     n = 500,
                                      logor_side_effects_mu = logor_side_effects_mu,
                                      logor_side_effects_sd = logor_side_effects_sd,
                                      n.iter = 5000),
@@ -129,6 +137,413 @@ plot(EVPI,
      main = "Expected Value of Perfect Information",
      type = "l")
 points(chemotherapy_output$k, evsi_OR$evppi, type = "l", lty = 2)
-x <- evsi_default %>% filter(n == 760) %>% select(evsi)
+x <- evsi_OR %>% filter(n == 760) %>% select(evsi)
 points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
-points(chemotherapy_output$k, evsi_OR$evsi, type = "l", lty = 3)
+points(chemotherapy_output$k, x$evsi, type = "l", lty = 3)
+
+#### STUDY 2: Randomised Trial with Multiple Outcomes ####
+# Data generation function
+full_datagen_fn <- function(inputs, n = 500){
+  # Load the data
+  p_side_effects_t1 <- inputs[, "p_side_effects_t1"]
+  p_side_effects_t2 <- inputs[, "p_side_effects_t2"]
+  p_hospitalised_total <- inputs[, "p_hospitalised_total"]
+  p_died <- inputs[, "p_died"]
+  lambda_home <- inputs[, "lambda_home"]
+  lambda_hosp <- inputs[, "lambda_hosp"]
+  rate_recover_hosp <- -log(1 -lambda_hosp )
+  rate_recover_home <- -log(1 - lambda_home)
+  
+  X1 <- X2 <- X_hosp <- X_dead <- N_recover_home <-  N_recover_hospital <- vector("numeric", length = dim(inputs)[1])
+  T_home <- T_hosp <- matrix(NA, nrow = dim(inputs)[1], ncol = 2 * n)
+  for(i in 1:dim(inputs)[1]){
+    # Simulate the number of patients with side effects
+    X1[i] <- rbinom(1, n, p_side_effects_t1[i])
+    X2[i] <- rbinom(1, n, p_side_effects_t2[i])
+    
+    # Simulate the number of patients hospitalised 
+    X_hosp[i] <- rbinom(1, X1[i] + X2[i], p_hospitalised_total[i])
+    # Simulate the number of patients die
+    X_dead[i] <- rbinom(1, X_hosp[i], p_died[i])
+    
+    ## Simulate recovery times for patients
+    N_recover_home[i] <- X1[i] + X2[i] - X_hosp[i]
+    T_home[i, 1:N_recover_home[i]] <- rexp(N_recover_home[i], rate_recover_home[i])
+    N_recover_hospital[i] <- X_hosp[i] - X_dead[i]
+    T_hosp[i, 1:N_recover_hospital[i]] <- rexp(N_recover_hospital[i], rate_recover_hosp[i])
+ 
+  }
+  
+  data_save_dat <- data.frame(cbind(X1 = X1, X2 = X2, 
+                                    X_hosp = X_hosp, X_dead = X_dead,
+                                    N_recover_home = N_recover_home,
+                                    N_recover_hospital = N_recover_hospital,
+                                    T_home = T_home, T_hosp = T_hosp))
+  return(data_save_dat)
+}
+
+# Analysis function based on JAGS
+full_analysis_fn <- function(data, args, pars){
+  # Create the data list for JAGS
+  data_jags <- list(X1 = data$X1,
+                    X2 = data$X2,
+                    X_hosp = data$X_hosp,
+                    X_dead = data$X_dead,
+                    T_home = as.vector(data[, (1:data$N_recover_home) + 6]),
+                    T_hosp = as.vector(data[, (6 + 2 * args$n) + (1:data$N_recover_hospital)]),
+                    N_recover_home = data$N_recover_home,
+                    N_recover_hosp = data$N_recover_hospital,
+                    n = args$n,
+                    n_side_effects = args$n_side_effects,
+                    n_patients = args$n_patients,
+                    logor_side_effects_mu = args$logor_side_effects_mu,
+                    logor_side_effects_sd = args$logor_side_effects_sd,
+                    p_recovery_home_alpha = betaPar(args$p_recovery_home_mu, 
+                                              args$p_recovery_home_sd)$alpha,
+                    p_recovery_home_beta = betaPar(args$p_recovery_home_mu, 
+                                                    args$p_recovery_home_sd)$beta,
+                    p_recovery_hosp_alpha = betaPar(args$p_recovery_hosp_mu, 
+                                              args$p_recovery_hosp_sd)$alpha,
+                    p_recovery_hosp_beta = betaPar(args$p_recovery_hosp_mu,
+                                              args$p_recovery_hosp_sd)$beta,
+                    time_horizon = args$time_horizon,
+                    n_died = args$n_died,
+                    n_hospitalised = args$n_hospitalised)
+  
+  LogOR_addoutcomes_trial <- function(){
+    
+    ## Models for the data
+    X1 ~ dbin(p_side_effects_t1, n)
+    X2 ~ dbin(p_side_effects_t2, n)
+    
+    X_hosp ~ dbinom(p_hospitalised_total, X1 + X2)
+    X_dead ~ dbin(p_died, X_hosp)
+    
+    rate_recover_home <- -log(1 - lambda_home)
+    rate_recover_hosp <- -log(1 - lambda_hosp)
+    
+    for(i in 1:N_recover_home){
+      T_home[i] ~ dexp(rate_recover_home)
+    }
+    
+    for(i in 1:N_recover_hosp){
+      T_hosp[i] ~ dexp(rate_recover_hosp)
+    }
+    
+    # Probability of side effects under treatment 1
+    p_side_effects_t1 ~ dbeta(1 + n_side_effects, 
+                              1 + n_patients - n_side_effects)
+    
+    # Log odds of side effects on treatment 2
+    logor_side_effects ~ dnorm(logor_side_effects_mu, logor_side_effects_sd)
+    # Odds of side effects on treatment 1
+    odds_side_effects_t1 <- p_side_effects_t1 / (1 - p_side_effects_t1)
+    # Odds for side effects on treatment 2
+    odds_side_effects_t2 <- odds_side_effects_t1 * exp(logor_side_effects)
+    
+    # Probability of side effects under treatment 2
+    p_side_effects_t2    <- odds_side_effects_t2 / (1 + odds_side_effects_t2)
+    
+    ## Variables to define transition probabilities
+    # Probability that a patient is hospitalised over the time horizon
+    p_hospitalised_total ~ dbeta(1 + n_hospitalised, 
+                                 1 + n_side_effects - n_hospitalised)
+    # Probability that a patient dies over the time horizon given they were 
+    # hospitalised
+    p_died ~ dbeta(1 + n_died, 1 + n_hospitalised - n_died)
+    # Lambda_home: Conditional probability that a patient recovers considering 
+    # that they are not hospitalised
+    lambda_home ~ dbeta(p_recovery_home_alpha, p_recovery_home_beta)
+    # Lambda_hosp: Conditional probability that a patient recovers considering 
+    # that they do not die
+    lambda_hosp ~ dbeta(p_recovery_hosp_alpha, p_recovery_hosp_beta)
+  }
+  
+  filein <- file.path(tempdir(),fileext="datmodel.txt")
+  R2OpenBUGS::write.model(LogOR_addoutcomes_trial,filein)
+  
+  # Perform the MCMC simulation with OpenBUGS.
+  # Close OpenBUGS once it has finished (if debug is set to TRUE)
+  bugs.data <- jags(
+    data =  data_jags,
+    parameters.to.save = pars,
+    model.file = filein, 
+    n.chains = 3, 
+    n.iter = args$n.iter, 
+    n.thin = 1, 
+    n.burnin = 250, progress.bar = "none") 
+  
+  # Resample treatment 1 from the prior as study will not updated t1
+  resample_t1 <- rbeta(length(bugs.data$BUGSoutput$sims.matrix[, pars[2]]),
+                       1 + args$n_side_effects,
+                       1 + args$n_patients - args$n_side_effects)
+  
+  return(data.frame(p_side_effects_t1 = resample_t1,
+                    p_side_effects_t2 = bugs.data$BUGSoutput$sims.matrix[, "p_side_effects_t2"],
+                    p_hospitalised_total= bugs.data$BUGSoutput$sims.matrix[, "p_hospitalised_total"],
+                    p_died = bugs.data$BUGSoutput$sims.matrix[, "p_died"],
+                    lambda_home = bugs.data$BUGSoutput$sims.matrix[, "lambda_home"],
+                    lambda_hosp = bugs.data$BUGSoutput$sims.matrix[, "lambda_hosp"]))
+}
+
+# EVSI calculation using the momemt matching method.
+evsi_OR_allout <- evsi(outputs = chemotherapy_output,
+                inputs = m_params,
+                pars = c("p_side_effects_t1", "p_side_effects_t2",
+                         "p_hospitalised_total", "p_died",
+                         "lambda_home", "lambda_hosp"),
+                n = seq(500, 1500, by = 200),
+                method = "mm",
+                datagen_fn = full_datagen_fn,
+                model_fn = calculate_costs_effects,
+                analysis_args = list(n_side_effects = n_side_effects,
+                                     n_patients = n_patients,
+                                     n = 500,
+                                     logor_side_effects_mu = logor_side_effects_mu,
+                                     logor_side_effects_sd = logor_side_effects_sd,
+                                     betaPar = betaPar,
+                                     p_recovery_home_mu = p_recovery_home_mu,
+                                     p_recovery_home_sd = p_recovery_home_sd,
+                                     p_recovery_hosp_mu = p_recovery_hosp_mu,
+                                     p_recovery_hosp_sd = p_recovery_hosp_sd,
+                                     n.iter = 5000,
+                                     time_horizon = time_horizon,
+                                     n_died = n_died,
+                                     n_hospitalised = n_hospitalised),
+                analysis_fn = full_analysis_fn, 
+                par_fn = generate_psa_parameters)
+
+#### STUDY 3: Retrospective Study of Hospital Data ####
+# Data generation function
+retrohosp_datagen_fn <- function(inputs, n = 500){
+  # Load the data
+  p_died <- inputs[, "p_died"]
+  lambda_hosp <- inputs[, "lambda_hosp"]
+  rate_recover_hosp <- -log(1 -lambda_hosp )
+  
+  X_dead <- N_recover_hospital <- vector("numeric", length = dim(inputs)[1])
+  T_hosp <- matrix(NA, nrow = dim(inputs)[1], ncol = n)
+  for(i in 1:dim(inputs)[1]){
+    # Simulate the number of patients die
+    X_dead[i] <- rbinom(1, n, p_died[i])
+    
+    ## Simulate recovery times for patients
+    N_recover_hospital[i] <- n - X_dead[i]
+    T_hosp[i, 1:N_recover_hospital[i]] <- rexp(N_recover_hospital[i], rate_recover_hosp[i])
+  }
+  
+  data_save_dat <- data.frame(cbind(X_dead = X_dead, T_hosp = T_hosp))
+  return(data_save_dat)
+}
+
+# Analysis function based on JAGS
+retrohosp_analysis_fn <- function(data, args, pars){
+  # Create the data list for JAGS
+  data_jags <- list(X_dead = data$X_dead,
+                    N_recover_hosp = args$n - data$X_dead,
+                    T_hosp = as.vector(data[, 1 + (1:(args$n - data$X_dead))]),
+                    n = args$n,
+                    p_recovery_hosp_alpha = betaPar(args$p_recovery_hosp_mu, 
+                                                    args$p_recovery_hosp_sd)$alpha,
+                    p_recovery_hosp_beta = betaPar(args$p_recovery_hosp_mu,
+                                                   args$p_recovery_hosp_sd)$beta,
+                    n_died = args$n_died,
+                    n_hospitalised = args$n_hospitalised)
+  
+  LogOR_addoutcomes_trial <- function(){
+    
+    ## Models for the data
+    X_dead ~ dbin(p_died, n)
+    
+    rate_recover_hosp <- -log(1 - lambda_hosp)
+    for(i in 1:N_recover_hosp){
+      T_hosp[i] ~ dexp(rate_recover_hosp)
+    }
+    
+    # Probability that a patient dies over the time horizon given they were 
+    # hospitalised
+    p_died ~ dbeta(1 + n_died, 1 + n_hospitalised - n_died)
+    # Lambda_hosp: Conditional probability that a patient recovers considering 
+    # that they do not die
+    lambda_hosp ~ dbeta(p_recovery_hosp_alpha, p_recovery_hosp_beta)
+  }
+  
+  filein <- file.path(tempdir(),fileext="datmodel.txt")
+  R2OpenBUGS::write.model(LogOR_addoutcomes_trial,filein)
+  
+  # Perform the MCMC simulation with OpenBUGS.
+  # Close OpenBUGS once it has finished (if debug is set to TRUE)
+  bugs.data <- jags(
+    data =  data_jags,
+    parameters.to.save = pars,
+    model.file = filein, 
+    n.chains = 3, 
+    n.iter = args$n.iter, 
+    n.thin = 1, 
+    n.burnin = 250, progress.bar = "none") 
+  
+  return(data.frame(p_died = bugs.data$BUGSoutput$sims.matrix[, "p_died"],
+                    lambda_hosp = bugs.data$BUGSoutput$sims.matrix[, "lambda_hosp"]))
+}
+
+# EVSI calculation using the momemt matching method.
+evsi_OR_retrohosp <- evsi(outputs = chemotherapy_output,
+                       inputs = m_params,
+                       pars = c("p_died", "lambda_hosp"),
+                       n = seq(500, 1500, by = 200),
+                       method = "mm",
+                       datagen_fn = retrohosp_datagen_fn,
+                       model_fn = calculate_costs_effects,
+                       analysis_args = list(n = 500,
+                                            betaPar = betaPar,
+                                            p_recovery_hosp_mu = p_recovery_hosp_mu,
+                                            p_recovery_hosp_sd = p_recovery_hosp_sd,
+                                            n.iter = 5000,
+                                            n_died = n_died,
+                                            n_hospitalised = n_hospitalised),
+                       analysis_fn = retrohosp_analysis_fn, 
+                       par_fn = generate_psa_parameters)
+
+EVPI <- evpi(chemotherapy_output)
+plot(EVPI,
+     xlab = "Willingness-to-Pay",
+     ylab = "EVPI",
+     main = "Expected Value of Perfect Information",
+     type = "l")
+x <- evsi_OR_retrohosp %>% filter(n == 500) %>% select(evsi)
+points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
+#### STUDY 4: Registry Study of Observational Data ####
+# Data generation function
+registry_datagen_fn <- function(inputs, n = 500){
+  # Load the data
+  p_hospitalised_total <- inputs[, "p_hospitalised_total"]
+  p_died <- inputs[, "p_died"]
+  lambda_home <- inputs[, "lambda_home"]
+  lambda_hosp <- inputs[, "lambda_hosp"]
+  rate_recover_hosp <- -log(1 -lambda_hosp )
+  rate_recover_home <- -log(1 - lambda_home)
+  
+  X_hosp <- X_dead <- N_recover_home <-  N_recover_hospital <- vector("numeric", length = dim(inputs)[1])
+  T_home <- T_hosp <- matrix(NA, nrow = dim(inputs)[1], ncol = 2 * n)
+  for(i in 1:dim(inputs)[1]){
+    # Simulate the number of patients hospitalised 
+    X_hosp[i] <- rbinom(1, n, p_hospitalised_total[i])
+    # Simulate the number of patients die
+    X_dead[i] <- rbinom(1, X_hosp[i], p_died[i])
+    
+    ## Simulate recovery times for patients
+    N_recover_home[i] <- n - X_hosp[i]
+    T_home[i, 1:N_recover_home[i]] <- rexp(N_recover_home[i], rate_recover_home[i])
+    N_recover_hospital[i] <- X_hosp[i] - X_dead[i]
+    T_hosp[i, 1:N_recover_hospital[i]] <- rexp(N_recover_hospital[i], rate_recover_hosp[i])
+    
+  }
+  
+  data_save_dat <- data.frame(cbind(X_hosp = X_hosp, X_dead = X_dead,
+                                    N_recover_home = N_recover_home,
+                                    N_recover_hospital = N_recover_hospital,
+                                    T_home = T_home, T_hosp = T_hosp))
+  return(data_save_dat)
+}
+
+# Analysis function based on JAGS
+registry_analysis_fn <- function(data, args, pars){
+  # Create the data list for JAGS
+  data_jags <- list(X_hosp = data$X_hosp,
+                    X_dead = data$X_dead,
+                    T_home = as.vector(data[, (1:data$N_recover_home) + 6]),
+                    T_hosp = as.vector(data[, (6 + 2 * args$n) + (1:data$N_recover_hospital)]),
+                    N_recover_home = data$N_recover_home,
+                    N_recover_hosp = data$N_recover_hospital,
+                    n = args$n,
+                    n_side_effects = args$n_side_effects,
+                    p_recovery_home_alpha = betaPar(args$p_recovery_home_mu, 
+                                                    args$p_recovery_home_sd)$alpha,
+                    p_recovery_home_beta = betaPar(args$p_recovery_home_mu, 
+                                                   args$p_recovery_home_sd)$beta,
+                    p_recovery_hosp_alpha = betaPar(args$p_recovery_hosp_mu, 
+                                                    args$p_recovery_hosp_sd)$alpha,
+                    p_recovery_hosp_beta = betaPar(args$p_recovery_hosp_mu,
+                                                   args$p_recovery_hosp_sd)$beta,
+                    n_died = args$n_died,
+                    n_hospitalised = args$n_hospitalised)
+  
+  LogOR_addoutcomes_trial <- function(){
+    X_hosp ~ dbinom(p_hospitalised_total, n)
+    X_dead ~ dbin(p_died, X_hosp)
+    
+    rate_recover_home <- -log(1 - lambda_home)
+    rate_recover_hosp <- -log(1 - lambda_hosp)
+    
+    for(i in 1:N_recover_home){
+      T_home[i] ~ dexp(rate_recover_home)
+    }
+    
+    for(i in 1:N_recover_hosp){
+      T_hosp[i] ~ dexp(rate_recover_hosp)
+    }
+  
+    ## Variables to define transition probabilities
+    # Probability that a patient is hospitalised over the time horizon
+    p_hospitalised_total ~ dbeta(1 + n_hospitalised, 
+                                 1 + n_side_effects - n_hospitalised)
+    # Probability that a patient dies over the time horizon given they were 
+    # hospitalised
+    p_died ~ dbeta(1 + n_died, 1 + n_hospitalised - n_died)
+    # Lambda_home: Conditional probability that a patient recovers considering 
+    # that they are not hospitalised
+    lambda_home ~ dbeta(p_recovery_home_alpha, p_recovery_home_beta)
+    # Lambda_hosp: Conditional probability that a patient recovers considering 
+    # that they do not die
+    lambda_hosp ~ dbeta(p_recovery_hosp_alpha, p_recovery_hosp_beta)
+  }
+  
+  filein <- file.path(tempdir(),fileext="datmodel.txt")
+  R2OpenBUGS::write.model(LogOR_addoutcomes_trial,filein)
+  
+  # Perform the MCMC simulation with OpenBUGS.
+  # Close OpenBUGS once it has finished (if debug is set to TRUE)
+  bugs.data <- jags(
+    data =  data_jags,
+    parameters.to.save = pars,
+    model.file = filein, 
+    n.chains = 3, 
+    n.iter = args$n.iter, 
+    n.thin = 1, 
+    n.burnin = 250, progress.bar = "none") 
+  
+  return(data.frame(p_hospitalised_total= bugs.data$BUGSoutput$sims.matrix[, "p_hospitalised_total"],
+                    p_died = bugs.data$BUGSoutput$sims.matrix[, "p_died"],
+                    lambda_home = bugs.data$BUGSoutput$sims.matrix[, "lambda_home"],
+                    lambda_hosp = bugs.data$BUGSoutput$sims.matrix[, "lambda_hosp"]))
+}
+
+# EVSI calculation using the momemt matching method.
+evsi_OR_registry <- evsi(outputs = chemotherapy_output,
+                          inputs = m_params,
+                          pars = c("p_hospitalised_total","p_died", "lambda_home",
+                                   "lambda_hosp"),
+                          n = seq(500, 1500, by = 200),
+                          method = "mm",
+                          datagen_fn = registry_datagen_fn,
+                          model_fn = calculate_costs_effects,
+                          analysis_args = list(n_side_effects = n_side_effects,
+                                               n = 500,
+                                               betaPar = betaPar,
+                                               p_recovery_home_mu = p_recovery_home_mu,
+                                               p_recovery_home_sd = p_recovery_home_sd,
+                                               p_recovery_hosp_mu = p_recovery_hosp_mu,
+                                               p_recovery_hosp_sd = p_recovery_hosp_sd,
+                                               n.iter = 5000,
+                                               n_died = n_died,
+                                               n_hospitalised = n_hospitalised),
+                          analysis_fn = registry_analysis_fn, 
+                          par_fn = generate_psa_parameters)
+EVPI <- evpi(chemotherapy_output)
+plot(EVPI,
+     xlab = "Willingness-to-Pay",
+     ylab = "EVPI",
+     main = "Expected Value of Perfect Information",
+     type = "l")
+x <- evsi_OR_registry %>% filter(n == 500) %>% select(evsi)
+points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
