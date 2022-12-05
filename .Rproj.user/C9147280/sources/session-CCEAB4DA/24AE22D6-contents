@@ -1,0 +1,119 @@
+#######################################################################
+### Expected Value of Sample Information Analysis - Moment Matching ###
+#######################################################################
+### Packages
+library(voi)
+library(ggplot2)
+library(dplyr)
+library(R2jags)
+
+## Run the model
+source("04_analysis/02_baseline_model_output.R")
+
+## Baseline Cost-Effectiveness Formatting
+# The output from the cost-effectiveness model should be formatted for 
+# the voi package.
+# Use BCEA package to create a cost-effectiveness object.
+chemotherapy_output <- list(e = m_costs_effects[, "Effects", ],
+                            c = m_costs_effects[, "Costs", ],
+                            k = seq(0, 50000, length.out = 501))
+
+#### STUDY 3: Retrospective Study of Hospital Data ####
+# Data generation function
+retrohosp_datagen_fn <- function(inputs, n = 500){
+  # Load the data
+  p_died <- inputs[, "p_died"]
+  lambda_hosp <- inputs[, "lambda_hosp"]
+  rate_recover_hosp <- -log(1 -lambda_hosp )
+  
+  X_dead <- N_recover_hospital <- vector("numeric", length = dim(inputs)[1])
+  T_hosp <- matrix(NA, nrow = dim(inputs)[1], ncol = n)
+  for(i in 1:dim(inputs)[1]){
+    # Simulate the number of patients die
+    X_dead[i] <- rbinom(1, n, p_died[i])
+    
+    ## Simulate recovery times for patients
+    N_recover_hospital[i] <- n - X_dead[i]
+    T_hosp[i, 1:N_recover_hospital[i]] <- rexp(N_recover_hospital[i], rate_recover_hosp[i])
+  }
+  
+  data_save_dat <- data.frame(cbind(X_dead = X_dead, T_hosp = T_hosp))
+  return(data_save_dat)
+}
+
+# Analysis function based on JAGS
+retrohosp_analysis_fn <- function(data, args, pars){
+  # Create the data list for JAGS
+  data_jags <- list(X_dead = data$X_dead,
+                    N_recover_hosp = args$n - data$X_dead,
+                    T_hosp = as.vector(data[, 1 + (1:(args$n - data$X_dead))]),
+                    n = args$n,
+                    p_recovery_hosp_alpha = betaPar(args$p_recovery_hosp_mu, 
+                                                    args$p_recovery_hosp_sd)$alpha,
+                    p_recovery_hosp_beta = betaPar(args$p_recovery_hosp_mu,
+                                                   args$p_recovery_hosp_sd)$beta,
+                    n_died = args$n_died,
+                    n_hospitalised = args$n_hospitalised)
+  
+  LogOR_addoutcomes_trial <- function(){
+    
+    ## Models for the data
+    X_dead ~ dbin(p_died, n)
+    
+    rate_recover_hosp <- -log(1 - lambda_hosp)
+    for(i in 1:N_recover_hosp){
+      T_hosp[i] ~ dexp(rate_recover_hosp)
+    }
+    
+    # Probability that a patient dies over the time horizon given they were 
+    # hospitalised
+    p_died ~ dbeta(1 + n_died, 1 + n_hospitalised - n_died)
+    # Lambda_hosp: Conditional probability that a patient recovers considering 
+    # that they do not die
+    lambda_hosp ~ dbeta(p_recovery_hosp_alpha, p_recovery_hosp_beta)
+  }
+  
+  filein <- file.path(tempdir(),fileext="datmodel.txt")
+  R2OpenBUGS::write.model(LogOR_addoutcomes_trial,filein)
+  
+  # Perform the MCMC simulation with OpenBUGS.
+  # Close OpenBUGS once it has finished (if debug is set to TRUE)
+  bugs.data <- jags(
+    data =  data_jags,
+    parameters.to.save = pars,
+    model.file = filein, 
+    n.chains = 3, 
+    n.iter = args$n.iter, 
+    n.thin = 1, 
+    n.burnin = 250, progress.bar = "none") 
+  
+  return(data.frame(p_died = bugs.data$BUGSoutput$sims.matrix[, "p_died"],
+                    lambda_hosp = bugs.data$BUGSoutput$sims.matrix[, "lambda_hosp"]))
+}
+
+# EVSI calculation using the momemt matching method.
+evsi_OR_retrohosp <- evsi(outputs = chemotherapy_output,
+                          inputs = m_params,
+                          pars = c("p_died", "lambda_hosp"),
+                          n = seq(500, 1500, by = 200),
+                          method = "mm",
+                          datagen_fn = retrohosp_datagen_fn,
+                          model_fn = calculate_costs_effects,
+                          analysis_args = list(n = 500,
+                                               betaPar = betaPar,
+                                               p_recovery_hosp_mu = p_recovery_hosp_mu,
+                                               p_recovery_hosp_sd = p_recovery_hosp_sd,
+                                               n.iter = 5000,
+                                               n_died = n_died,
+                                               n_hospitalised = n_hospitalised),
+                          analysis_fn = retrohosp_analysis_fn, 
+                          par_fn = generate_psa_parameters)
+
+EVPI <- evpi(chemotherapy_output)
+plot(EVPI,
+     xlab = "Willingness-to-Pay",
+     ylab = "EVPI",
+     main = "Expected Value of Perfect Information",
+     type = "l")
+x <- evsi_OR_retrohosp %>% filter(n == 500) %>% select(evsi)
+points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
