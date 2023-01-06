@@ -398,7 +398,7 @@ retrohosp_analysis_fn <- function(data, args, pars){
 }
 
 # EVSI calculation using the momemt matching method.
-evsi_OR_retrohosp <- evsi(outputs = chemotherapy_output,
+evsi_retrohosp <- evsi(outputs = chemotherapy_output,
                        inputs = m_params,
                        pars = c("p_died", "lambda_hosp"),
                        n = seq(500, 1500, by = 200),
@@ -421,7 +421,7 @@ plot(EVPI,
      ylab = "EVPI",
      main = "Expected Value of Perfect Information",
      type = "l")
-x <- evsi_OR_retrohosp %>% filter(n == 500) %>% select(evsi)
+x <- evsi_retrohosp %>% filter(n == 500) %>% select(evsi)
 points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
 
 #### STUDY 4: Registry Study of Observational Data ####
@@ -531,7 +531,7 @@ registry_analysis_fn <- function(data, args, pars){
 }
 
 # EVSI calculation using the momemt matching method.
-evsi_OR_registry <- evsi(outputs = chemotherapy_output,
+evsi_registry <- evsi(outputs = chemotherapy_output,
                           inputs = m_params,
                           pars = c("p_hospitalised_total","p_died", "lambda_home",
                                    "lambda_hosp"),
@@ -557,7 +557,7 @@ plot(EVPI,
      ylab = "EVPI",
      main = "Expected Value of Perfect Information",
      type = "l")
-x <- evsi_OR_registry %>% filter(n == 500) %>% select(evsi)
+x <- evsi_registry %>% filter(n == 500) %>% select(evsi)
 points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
 
 
@@ -565,9 +565,9 @@ points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
 #### STUDY 5: A Cost Analysis ####
 # Data generation function
 cost_datagen_fn <- function(inputs, n = 500, 
-                            v_home_care = function(){return(sqrt(rgamma(1, shape = 3, scale = 39)))},
-                            v_hospital = function(){return(sqrt(rgamma(1, shape = 10, scale = 45)))},
-                            v_death = function(){return(sqrt(rgamma(1, shape = 15, scale = 112.5)))}
+                            v_home_care_fun = function(){return(sqrt(rgamma(1, shape = 3, scale = 39)))},
+                            v_hospital_fun = function(){return(sqrt(rgamma(1, shape = 10, scale = 45)))},
+                            v_death_fun = function(){return(sqrt(rgamma(1, shape = 15, scale = 112.5)))}
                             ){
   lognormPar = function(m,s) {
     # m: Mean of Log-Normal distribution
@@ -582,19 +582,20 @@ cost_datagen_fn <- function(inputs, n = 500,
       list(meanlog = meanlog, sdlog = sdlog)
     )
   }
-  # Load the data
-  m_home_care <- inputs[, "c_home_care"]
-  m_hospital <- inputs[, "c_hospital"]
-  m_death <- inputs[, "c_death"]
-  v_home_care <- v_home_care()
-  v_hospital <- v_hospital()
-  v_death <- v_death()
-  par_home_care <- lognormPar(m_home_care, sqrt(v_home_care))
-  par_hospital <- lognormPar(m_hospital, sqrt(v_hospital))
-  par_death <- lognormPar(m_death, sqrt(v_death))
+
   
   X_home_care <- X_hospital <- X_death <- matrix(NA, nrow = dim(inputs)[1], ncol = n[1])
   for(i in 1:dim(inputs)[1]){
+    # Load the data
+    m_home_care <- inputs[i, "c_home_care"]
+    m_hospital <- inputs[i, "c_hospital"]
+    m_death <- inputs[i, "c_death"]
+    v_home_care <- v_home_care_fun()
+    v_hospital <- v_hospital_fun()
+    v_death <- v_death_fun()
+    par_home_care <- lognormPar(m_home_care, sqrt(v_home_care))
+    par_hospital <- lognormPar(m_hospital, sqrt(v_hospital))
+    par_death <- lognormPar(m_death, sqrt(v_death))
     # Simulate the costs 
     X_home_care[i, ] <- rlnorm(n[1], par_home_care$meanlog, par_home_care$sdlog)
     X_hospital[i, ] <- rlnorm(n[1], par_hospital$meanlog, par_hospital$sdlog)
@@ -687,7 +688,7 @@ cost_analysis_fn <- function(data, args, pars){
 
 # EVSI calculation using the momemt matching method.
 undebug(evsi)
-evsi_OR_costs <- evsi(outputs = chemotherapy_output,
+evsi_costs <- evsi(outputs = chemotherapy_output,
                          inputs = m_params,
                          pars = c("c_home_care", "c_hospital", "c_death"),
                          n = seq(30, 1000, by = 200),
@@ -705,19 +706,175 @@ evsi_OR_costs <- evsi(outputs = chemotherapy_output,
                                               n.iter = 2000),
                          analysis_fn = cost_analysis_fn, 
                          par_fn = generate_psa_parameters,
-                      Q = 5)
-debug(evsi)
+                      Q = 50)
+
 EVPI <- evpi(chemotherapy_output)
 plot(EVPI,
      xlab = "Willingness-to-Pay",
      ylab = "EVPI",
      main = "Expected Value of Perfect Information",
      type = "l")
-x <- evsi_OR_registry %>% filter(n == 500) %>% select(evsi)
+x <- evsi_costs %>% filter(n == 1000) %>% select(evsi)
 points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
 
 
-alpha <- 15
-quantile(sqrt(rgamma(10000, shape = alpha, scale = 7.5 * alpha)), prob = c(0.025, 0.5, 0.975))
+#### STUDY 6: A Utility Analysis ####
+# Data generation function
+utility_datagen_fn <- function(inputs, n = 500, 
+                            sd_recovery_fun = function(){return(runif(1, 0.000001, 0.00005))},
+                            sd_home_care_fun = function(){return(runif(1, 0.00001, 0.005))},
+                            sd_hospital_fun = function(){return(runif(1, 0.00001, 0.01))}
+){
+  betaPar <- function(m, s) {
+    # m:  Mean of the Beta distribution
+    # m: Standard deviation of the Beta distribution
+    
+    var <- s ^ 2
+    alpha <- ((1 - m) / var - 1 / m) * m ^ 2
+    beta <- alpha * (1 / m - 1)
+    
+    return(
+      list(alpha = alpha, beta = beta)
+    )
+  }
+  # Load the data
+  X_home_care <- X_hospital <- X_recovery <- matrix(NA, nrow = dim(inputs)[1], ncol = n[1])
+  for(i in 1:dim(inputs)[1]){
+    set.seed(123 + i)
+    m_recovery <- inputs[i, "u_recovery"]
+    m_home_care <- inputs[i, "u_home_care"]
+    m_hospital <- inputs[i, "u_hospital"]
+    sd_recovery <- sd_recovery_fun()
+    sd_home_care <- sd_home_care_fun()
+    sd_hospital <- sd_hospital_fun()
+    
+    par_recovery <- betaPar(m_recovery, sd_recovery)
+    par_home_care <- betaPar(m_home_care, sd_home_care)
+    par_hospital <- betaPar(m_hospital, sd_hospital)
+    
+    # Simulate the costs 
+    X_recovery[i, ] <- rbeta(n[1], par_recovery$alpha, par_recovery$beta)
+    X_home_care[i, ] <- rbeta(n[1], par_home_care$alpha, par_home_care$beta)
+    X_hospital[i, ] <- rbeta(n[1], par_hospital$alpha, par_hospital$beta)
 
-50^2
+    
+  }
+  
+  data_save_dat <- data.frame(cbind(X_recovery = X_recovery,
+                                    X_home_care = X_home_care,
+                                    X_hospital = X_hospital))
+  return(data_save_dat)
+}
+dat_try <- utility_datagen_fn(m_params)
+
+# Analysis function based on JAGS
+utility_analysis_fn <- function(data, args, pars){
+  # Create the data list for JAGS
+  data_jags <- list(X_recovery = as.vector(data[, (1:args$n)]),
+                    X_home_care = as.vector(data[, args$n + (1:args$n)]),
+                    X_hospital = as.vector(data[, 2*args$n + (1:args$n)]),
+                    n = args$n,
+                    alpha_recovery = args$betaPar(
+                      args$u_recovery_mu,
+                      args$u_recovery_sd
+                    )$alpha,
+                    beta_recovery = args$betaPar(
+                      args$u_recovery_mu,
+                      args$u_recovery_sd
+                    )$beta,
+                    alpha_home_care = args$betaPar(
+                      args$u_home_care_mu,
+                      args$u_home_care_sd
+                    )$alpha,
+                    beta_home_care = args$betaPar(
+                      args$u_home_care_mu,
+                      args$u_home_care_sd
+                    )$beta,
+                    alpha_hospital = args$betaPar(
+                      args$u_hospital_mu,
+                      args$u_hospital_sd
+                    )$alpha,
+                    beta_hospital = args$betaPar(
+                      args$u_hospital_mu,
+                      args$u_hospital_sd
+                    )$beta)
+  
+  trial <- function(){
+    for(i in 1:n){
+      X_recovery[i] ~ dbeta(a_recovery, b_recovery)
+      X_home_care[i] ~ dbeta(a_home_care, b_home_care)
+      X_hospital[i] ~ dbeta(a_hospital, b_hospital)
+    }
+    
+    u_recovery ~ dbeta(alpha_recovery, beta_recovery)
+    u_home_care ~ dbeta(alpha_home_care, beta_home_care)
+    u_hospital ~ dbeta(alpha_hospital, beta_hospital)
+    
+    sd_recovery ~ dunif(0.000001, 0.00005)
+    sd_home_care ~ dunif(0.00001, 0.005)
+    sd_hospital ~ dunif(0.00001, 0.01)
+    
+    v_recovery <- sd_recovery ^ 2
+    a_recovery <- ((1 - u_recovery) / v_recovery - 1 / u_recovery) * u_recovery ^ 2
+    b_recovery <- a_recovery * (1 / u_recovery - 1)
+    
+    v_home_care <- sd_home_care ^ 2
+    a_home_care <- ((1 - u_home_care) / v_home_care - 1 / u_home_care) * u_home_care ^ 2
+    b_home_care <- a_home_care * (1 / u_home_care - 1)
+    
+    v_hospital <- sd_hospital ^ 2
+    a_hospital <- ((1 - u_hospital) / v_hospital - 1 / u_hospital) * u_hospital ^ 2
+    b_hospital <- a_hospital * (1 / u_hospital - 1)
+  }
+  
+  filein <- file.path(tempdir(),fileext="datmodel.txt")
+  R2OpenBUGS::write.model(trial,filein)
+  
+  # Perform the MCMC simulation with OpenBUGS.
+  # Close OpenBUGS once it has finished (if debug is set to TRUE)
+  bugs.data <- jags(
+    data =  data_jags,
+    parameters.to.save = pars,
+    model.file = filein, 
+    n.chains = 1, 
+    n.iter = args$n.iter, 
+    n.thin = 1, 
+    n.burnin = 250, progress.bar = "none") 
+  
+  return(data.frame(u_recovery = bugs.data$BUGSoutput$sims.matrix[, "u_recovery"],
+                    u_home_care = bugs.data$BUGSoutput$sims.matrix[, "u_home_care"],
+                    u_hospital = bugs.data$BUGSoutput$sims.matrix[, "u_hospital"]))
+}
+
+
+# EVSI calculation using the momemt matching method.
+undebug(evsi)
+evsi_utility <- evsi(outputs = chemotherapy_output,
+                   inputs = m_params,
+                   pars = c("u_recovery", "u_home_care", "u_hospital"),
+                   n = seq(30, 1000, by = 200),
+                   method = "mm",
+                   datagen_fn = utility_datagen_fn,
+                   model_fn = calculate_costs_effects,
+                   analysis_args = list(n = 20,
+                                        betaPar = betaPar,
+                                        u_recovery_mu = u_recovery_mu,
+                                        u_recovery_sd = u_recovery_sd,
+                                        u_home_care_mu = u_home_care_mu,
+                                        u_home_care_sd = u_home_care_sd,
+                                        u_hospital_mu = u_hospital_mu,
+                                        u_hospital_sd = u_hospital_sd,
+                                        n.iter = 2000),
+                   analysis_fn = utility_analysis_fn, 
+                   par_fn = generate_psa_parameters,
+                   Q = 50)
+
+EVPI <- evpi(chemotherapy_output)
+plot(EVPI,
+     xlab = "Willingness-to-Pay",
+     ylab = "EVPI",
+     main = "Expected Value of Perfect Information",
+     type = "l")
+x <- evsi_utility %>% filter(n == 630) %>% select(evsi)
+points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
+
