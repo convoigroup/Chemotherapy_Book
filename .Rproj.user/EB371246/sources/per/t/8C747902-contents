@@ -13,8 +13,8 @@ mean_costs_effects <- apply(m_costs_effects, c(2, 3), mean)
 write.csv(mean_costs_effects, "07_tables/Mean_Costs_Effects.csv")
 
 ### Incremental Cost-Effectiveness Ratio (ICER)
-ICER <- mean(m_costs_effects[, 1, 2] - m_costs_effects[, 2, 2]) / 
-  mean(m_costs_effects[, 1, 1] - m_costs_effects[, 2, 1])
+ICER <- mean(m_costs_effects[, 2, 2] - m_costs_effects[, 2, 1]) / 
+  mean(m_costs_effects[, 1, 2] - m_costs_effects[, 1, 1])
 ICER
 write.csv(ICER, "07_tables/ICER.csv")
 

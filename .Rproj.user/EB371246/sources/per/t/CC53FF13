@@ -1,26 +1,26 @@
 {
-    "collab_server" : "",
-    "contents" : "",
-    "created" : 1640026352663.000,
-    "dirty" : false,
-    "encoding" : "UTF-8",
-    "folds" : "",
-    "hash" : "2758567395",
-    "id" : "CC53FF13",
-    "lastKnownWriteTime" : 1640112167,
-    "last_content_update" : 1640112167468,
-    "path" : "~/Anna/SickKids/ConVOI/VOI Book/Chemotherapy_Book/04_analysis/03_Expected_Value_of_Perfect_Information.R",
-    "project_path" : "04_analysis/03_Expected_Value_of_Perfect_Information.R",
-    "properties" : {
-        "cursorPosition" : "36,0",
-        "scrollLine" : "16",
-        "tempName" : "Untitled1"
+    "id": "CC53FF13",
+    "path": "~/Anna/SickKids/ConVOI/VOI Book/Chemotherapy_Book/04_analysis/03_Expected_Value_of_Perfect_Information.R",
+    "project_path": "04_analysis/03_Expected_Value_of_Perfect_Information.R",
+    "type": "r_source",
+    "hash": "1801497360",
+    "contents": "",
+    "dirty": false,
+    "created": 1640026352663.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "cursorPosition": "39,0",
+        "scrollLine": "15",
+        "tempName": "Untitled1",
+        "Source": "Source"
     },
-    "read_only" : false,
-    "read_only_alternatives" : [
-    ],
-    "relative_order" : 2,
-    "source_on_save" : false,
-    "source_window" : "",
-    "type" : "r_source"
+    "folds": "",
+    "lastKnownWriteTime": 1673625802,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1673625802470,
+    "read_only": false,
+    "read_only_alternatives": []
 }

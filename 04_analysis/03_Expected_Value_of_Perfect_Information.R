@@ -4,7 +4,6 @@
 
 ### Packages
 library(voi)
-library(BCEA)
 
 ## Run the model
 source("04_analysis/01_model_run.R")
@@ -29,9 +28,12 @@ EVPI <- evpi(chemotherapy_output)
 EVPI$evpi[EVPI$k == wtp_fix]
 
 # Plot
+pdf("06_figs/EVPI.pdf")
 plot(EVPI,
      xlab = "Willingness-to-Pay",
      ylab = "EVPI",
      main = "Expected Value of Perfect Information",
      type = "l")
+dev.off()
+
 

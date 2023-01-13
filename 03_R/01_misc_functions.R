@@ -34,3 +34,19 @@ lognPar <- function(m,s) {
     list(meanlog = meanlog, sdlog = sdlog)
   )
 }
+
+## Function to transform values for mean and standard deviation into parameters 
+## for a Gamma distribution
+
+gammaPar <- function(m,s) {
+  # m: Mean of Log-Normal distribution
+  # s: Standard deiviation of Log-Normal distribution
+  
+  var <- s^2
+  beta <- m / var
+  alpha <- m * beta
+  
+  return(
+    list(alpha = alpha, beta = beta)
+  )
+}
