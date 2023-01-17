@@ -3,7 +3,7 @@
     "path": "~/GitHub/Chemotherapy_Book/04_analysis/05_Expected_Value_of_Sample_Information_MM.R",
     "project_path": "04_analysis/05_Expected_Value_of_Sample_Information_MM.R",
     "type": "r_source",
-    "hash": "3345580190",
+    "hash": "0",
     "contents": "",
     "dirty": false,
     "created": 1664285222861.0,
@@ -13,15 +13,15 @@
         "tempName": "Untitled1",
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "879,0",
-        "scrollLine": "850"
+        "cursorPosition": "882,0",
+        "scrollLine": "849"
     },
-    "folds": "49|43|56|0|\n59|45|111|0|\n185|47|286|0|\n212|40|259|2|\n328|50|347|0|\n350|52|397|0|\n428|49|458|0|\n461|51|530|0|\n",
-    "lastKnownWriteTime": 1673035099,
+    "folds": "49|43|56|0|\n59|45|111|0|\n172|47|273|0|\n199|40|246|2|\n459|49|489|0|\n492|51|561|0|\n",
+    "lastKnownWriteTime": 1673965631,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1673035099137,
+    "last_content_update": 1673965632008,
     "read_only": false,
     "read_only_alternatives": []
 }

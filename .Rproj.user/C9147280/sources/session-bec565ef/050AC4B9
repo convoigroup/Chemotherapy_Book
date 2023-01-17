@@ -1,26 +1,26 @@
 {
-    "id": "38ED6BAC",
-    "path": "~/GitHub/Chemotherapy_Book/04_analysis/01_model_run.R",
-    "project_path": "04_analysis/01_model_run.R",
+    "id": "050AC4B9",
+    "path": "~/GitHub/Chemotherapy_Book/03_R/01_misc_functions.R",
+    "project_path": "03_R/01_misc_functions.R",
     "type": "r_source",
     "hash": "0",
     "contents": "",
     "dirty": false,
-    "created": 1673032187196.0,
+    "created": 1673883210217.0,
     "source_on_save": false,
-    "relative_order": 5,
+    "relative_order": 4,
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "40,49",
-        "scrollLine": "10"
+        "cursorPosition": "40,8",
+        "scrollLine": "18"
     },
     "folds": "",
-    "lastKnownWriteTime": 1673035105,
+    "lastKnownWriteTime": 1673878895,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1673035105213,
+    "last_content_update": 1673878895,
     "read_only": false,
     "read_only_alternatives": []
 }

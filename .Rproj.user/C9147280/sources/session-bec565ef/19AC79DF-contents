@@ -54,6 +54,10 @@ generate_psa_parameters <- function(n){
   betapars <- betaPar(u_hospital_mu, u_hospital_sd)
   u_hospital <- rbeta(n, betapars$alpha, betapars$beta)
   
+  # Long term survival
+  gammapars <- gammaPar(rate_longterm_mu, rate_longterm_sd)
+  rate_longterm <- rgamma(n, shape = gammapars$alpha, rate = gammapars$beta)
+  
   # Specify a matrix containing all the parameters
   params_matrix <- data.frame(
     p_side_effects_t1, 
@@ -62,7 +66,7 @@ generate_psa_parameters <- function(n){
     u_recovery, u_home_care, u_hospital,
     logor_side_effects,
     p_hospitalised_total, p_died,
-    lambda_home, lambda_hosp)
+    lambda_home, lambda_hosp, rate_longterm)
   
   return(params_matrix)
 }
@@ -73,7 +77,8 @@ calculate_state_occupancy_markov_model <- function(
   p_side_effects_t1, 
   p_side_effects_t2,
   p_home_home, p_home_hospital, p_home_recover,
-  p_hospital_hospital, p_hospital_recover, p_hospital_dead)
+  p_hospital_hospital, p_hospital_recover, p_hospital_dead,
+  p_longterm)
   # All function arguments come from the generate_psa_parameters function except
   # time_horizon which is a model assumption
 { 
@@ -81,7 +86,7 @@ calculate_state_occupancy_markov_model <- function(
   ## States: Home care, Hospital care, Recovery, Death
   MM.mat <- matrix(c(p_home_home, p_home_hospital, p_home_recover, 0,
                      0, p_hospital_hospital, p_hospital_recover, p_hospital_dead,
-                     0, 0, 1, 0,
+                     0, 0, 1 - p_longterm, p_longterm,
                      0, 0, 0, 1),
                    nrow = 4, ncol = 4, byrow = TRUE)
   
@@ -109,7 +114,7 @@ calculate_costs_effects <- function(
   lambda_home, lambda_hosp,
   c_home_care, c_hospital, c_death,
   u_recovery, u_home_care, u_hospital,
-  logor_side_effects)
+  logor_side_effects, rate_longterm)
   # All function arguments come from the generate_psa_parameters function
 {
   # Calculate p_side_effects_2 from odds ratio
@@ -128,13 +133,15 @@ calculate_costs_effects <- function(
   p_hospital_dead <- 1 - (1 - p_died) ^ (1 / time_horizon)
   p_hospital_hospital <- (1 - lambda_hosp) * (1 - p_hospital_dead)
   p_hospital_recover <- lambda_hosp * (1 - p_hospital_dead)
+  p_longterm <- 1 - exp(-rate_longterm * 1/12)
   
   # Calculate the trace matrix from the markov model function
   m_markov_trace <- calculate_state_occupancy_markov_model(
     p_side_effects_t1,
     p_side_effects_t2,
     p_home_home, p_home_hospital, p_home_recover,
-    p_hospital_hospital, p_hospital_recover, p_hospital_dead)
+    p_hospital_hospital, p_hospital_recover, p_hospital_dead,
+    p_longterm)
   
   ## costs and effectiveness for four states
   c_state_vector <- c(c_home_care, c_hospital, 0, 0)
@@ -150,12 +157,16 @@ calculate_costs_effects <- function(
   c_side_effects[2] <- (sum(c_state_vector %*% m_markov_trace[, , 2]) + 
                 c_death * m_markov_trace[4, time_horizon + 1, 2]) / 12
   c_drug <- c(c_treatment_1, c_treatment_2)
-  c_overall <- c(c_drug + c_side_effects)
+  c_longterm <- (1 - m_markov_trace[4, time_horizon + 1, ]) * 
+    (pexp(time_horizon_longterm - 2, rate = rate_longterm)) * c_death
+  c_overall <- c(c_drug + c_side_effects + c_longterm)
   
   ## Total QALY of side effects for both Soc and novel treatment
   u_side_effects <- array(NA, dim = 2)
   u_side_effects[1] <- sum(u_state_vector %*% m_markov_trace[,,1]) / 12
   u_side_effects[2] <- sum(u_state_vector %*% m_markov_trace[,,2]) / 12
+  u_longterm <- (1 - m_markov_trace[4, time_horizon + 1, ]) *
+    integrate(function(x){ (1 - pexp(x, rate = rate_longterm)) * u_home_care}, lower = 2, upper = time_horizon_longterm)$value
   ## QALY of total number of patients who do not experience adverse events for 15 days
   p_no_side_effects <- 1 - 
                           c(p_side_effects_t1,
@@ -163,7 +174,7 @@ calculate_costs_effects <- function(
   u_no_side_effects <-  p_no_side_effects * u_recovery * (time_horizon + 1) / 12
   
   ## Average effect for both Soc and novel treatment per person
-  u_overall <- c(u_side_effects + u_no_side_effects)
+  u_overall <- c(u_side_effects + u_no_side_effects + u_longterm)
   
   names(c_overall) <- paste0("cost",seq_along(c_overall))
   names(u_overall) <- paste0("eff",seq_along(u_overall))

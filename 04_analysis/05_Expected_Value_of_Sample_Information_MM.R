@@ -128,19 +128,6 @@ evsi_OR <- evsi(outputs = chemotherapy_output,
                 analysis_fn = OR_analysis_fn, 
                 par_fn = generate_psa_parameters)
 
-
-# Plot
-EVPI <- evpi(chemotherapy_output)
-plot(EVPI,
-     xlab = "Willingness-to-Pay",
-     ylab = "EVPI",
-     main = "Expected Value of Perfect Information",
-     type = "l")
-points(chemotherapy_output$k, evsi_OR$evppi, type = "l", lty = 2)
-x <- evsi_OR %>% filter(n == 760) %>% select(evsi)
-points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
-points(chemotherapy_output$k, x$evsi, type = "l", lty = 3)
-
 #### STUDY 2: Randomised Trial with Multiple Outcomes ####
 # Data generation function
 full_datagen_fn <- function(inputs, n = 500){
@@ -314,17 +301,70 @@ evsi_OR_allout <- evsi(outputs = chemotherapy_output,
                 par_fn = generate_psa_parameters,
                 npreg_method = "inla")
 
-EVPI <- evpi(chemotherapy_output)
-plot(EVPI,
-     xlab = "Willingness-to-Pay",
-     ylab = "EVPI",
-     main = "Expected Value of Perfect Information",
-     type = "l")
-points(chemotherapy_output$k, evsi_OR$evppi, type = "l", lty = 2)
-x <- evsi_OR_allout %>% filter(n == 1300) %>% select(evsi)
-points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
+#### STUDY 3: Long-term Survival ####
+longterm_datagen_fn <- function(inputs, n = 40000){
+  rate_longterm <- inputs[, "rate_longterm"]
+  sum_of_surv <- rgamma(dim(inputs)[1], shape = 2 * n, scale = n / rate_longterm)
+  return(data.frame(surv_sum = sum_of_surv))
+}
+data <- longterm_datagen_fn(m_params)
+pars <- "rate_longterm"
 
-#### STUDY 3: Retrospective Study of Hospital Data ####
+longterm_analysis_fn <- function(data, args, pars){
+  # Load key function
+  gammaPar <- args$gammaPar
+  
+  # Data list for JAGS
+  data_jags <- list(
+    surv_sum = data$surv_sum[1],
+    alpha_rate = gammaPar(args$rate_longterm_mu, 
+                          args$rate_longterm_sd)$alpha,
+    beta_rate = gammaPar(args$rate_longterm_mu, 
+                         args$rate_longterm_sd)$beta,
+    n = args$n
+  )
+  
+  longterm_jags <- function(){
+    ## Models for the data
+    surv_sum ~ dgamma(2 * n, n / rate_longterm)
+    rate_longterm ~ dgamma(alpha_rate, beta_rate)
+  }
+  
+  filein <- file.path(tempdir(),fileext="datmodel.txt")
+  R2OpenBUGS::write.model(longterm_jags,filein)
+  
+  # Perform the MCMC simulation with OpenBUGS.
+  # Close OpenBUGS once it has finished (if debug is set to TRUE)
+  bugs.data <- jags(
+    data =  data_jags,
+    parameters.to.save = pars,
+    model.file = filein, 
+    n.chains = 3, 
+    n.iter = args$n.iter, 
+    n.thin = 1, 
+    n.burnin = 250, progress.bar = "none") 
+  
+  return(data.frame(rate_longterm = bugs.data$BUGSoutput$sims.matrix[, "rate_longterm"]))
+}
+
+
+# EVSI calculation using the momemt matching method.
+evsi_longterm <- evsi(outputs = chemotherapy_output,
+                       inputs = m_params,
+                       pars = c("rate_longterm"),
+                       n = seq(40000, 50000, by = 500),
+                       method = "mm",
+                       datagen_fn = longterm_datagen_fn,
+                       model_fn = calculate_costs_effects,
+                       analysis_args = list(n = 40000,
+                                            gammaPar = gammaPar,
+                                            rate_longterm_mu = rate_longterm_mu,
+                                            rate_longterm_sd = rate_longterm_sd,
+                                            n.iter = 2000),
+                       analysis_fn = longterm_analysis_fn, 
+                       par_fn = generate_psa_parameters)
+
+#### STUDY 4: Retrospective Study of Hospital Data ####
 # Data generation function
 retrohosp_datagen_fn <- function(inputs, n = 500){
   # Load the data
@@ -415,16 +455,7 @@ evsi_retrohosp <- evsi(outputs = chemotherapy_output,
                        analysis_fn = retrohosp_analysis_fn, 
                        par_fn = generate_psa_parameters)
 
-EVPI <- evpi(chemotherapy_output)
-plot(EVPI,
-     xlab = "Willingness-to-Pay",
-     ylab = "EVPI",
-     main = "Expected Value of Perfect Information",
-     type = "l")
-x <- evsi_retrohosp %>% filter(n == 500) %>% select(evsi)
-points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
-
-#### STUDY 4: Registry Study of Observational Data ####
+#### STUDY 5: Registry Study of Observational Data ####
 # Data generation function
 registry_datagen_fn <- function(inputs, n = 500){
   # Load the data
@@ -551,18 +582,8 @@ evsi_registry <- evsi(outputs = chemotherapy_output,
                                                n_hospitalised = n_hospitalised),
                           analysis_fn = registry_analysis_fn, 
                           par_fn = generate_psa_parameters)
-EVPI <- evpi(chemotherapy_output)
-plot(EVPI,
-     xlab = "Willingness-to-Pay",
-     ylab = "EVPI",
-     main = "Expected Value of Perfect Information",
-     type = "l")
-x <- evsi_registry %>% filter(n == 500) %>% select(evsi)
-points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
 
-
-
-#### STUDY 5: A Cost Analysis ####
+#### STUDY 6: A Cost Analysis ####
 # Data generation function
 cost_datagen_fn <- function(inputs, n = 500, 
                             v_home_care_fun = function(){return(sqrt(rgamma(1, shape = 3, scale = 39)))},
@@ -687,7 +708,6 @@ cost_analysis_fn <- function(data, args, pars){
 
 
 # EVSI calculation using the momemt matching method.
-undebug(evsi)
 evsi_costs <- evsi(outputs = chemotherapy_output,
                          inputs = m_params,
                          pars = c("c_home_care", "c_hospital", "c_death"),
@@ -708,17 +728,7 @@ evsi_costs <- evsi(outputs = chemotherapy_output,
                          par_fn = generate_psa_parameters,
                       Q = 50)
 
-EVPI <- evpi(chemotherapy_output)
-plot(EVPI,
-     xlab = "Willingness-to-Pay",
-     ylab = "EVPI",
-     main = "Expected Value of Perfect Information",
-     type = "l")
-x <- evsi_costs %>% filter(n == 1000) %>% select(evsi)
-points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
-
-
-#### STUDY 6: A Utility Analysis ####
+#### STUDY 7: A Utility Analysis ####
 # Data generation function
 utility_datagen_fn <- function(inputs, n = 500, 
                             sd_recovery_fun = function(){return(runif(1, 0.000001, 0.00005))},
@@ -869,12 +879,4 @@ evsi_utility <- evsi(outputs = chemotherapy_output,
                    par_fn = generate_psa_parameters,
                    Q = 50)
 
-EVPI <- evpi(chemotherapy_output)
-plot(EVPI,
-     xlab = "Willingness-to-Pay",
-     ylab = "EVPI",
-     main = "Expected Value of Perfect Information",
-     type = "l")
-x <- evsi_utility %>% filter(n == 630) %>% select(evsi)
-points(chemotherapy_output$k, x$evsi, type = "l", lty = 4, col = "red")
 
