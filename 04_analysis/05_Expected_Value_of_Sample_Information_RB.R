@@ -1,6 +1,6 @@
-#######################################################################
-### Expected Value of Sample Information Analysis - Moment Matching ###
-#######################################################################
+########################################################################
+### Expected Value of Sample Information Analysis - Regression Based ###
+########################################################################
 ### Packages
 library(voi)
 library(ggplot2)
@@ -31,18 +31,13 @@ beta_params_t1 <- c(1 + n_side_effects,
 beta_params_t2 <- betaPar(mean(m_params$p_side_effects_t2),
                           sd(m_params$p_side_effects_t2))
 
-# EVSI calculation with moment matching method
+# EVSI calculation with GAM regression
 evsi_default <- evsi(outputs = chemotherapy_output,
                      inputs = m_params,
                      study = "trial_binary",
                      pars = c("p_side_effects_t1", "p_side_effects_t2"),
                      n = seq(500, 1500, by = 200),
                      method = "gam",
-                     model_fn = calculate_costs_effects,
-                     analysis_args = list(a1 = beta_params_t1[1],
-                                          b1 = beta_params_t1[2],
-                                          a2 = beta_params_t2$alpha,
-                                          b2 = beta_params_t2$beta),
                      par_fn = generate_psa_parameters)
 
 # Using a bespoke analysis function - trial only updates odds ratio.
@@ -52,21 +47,19 @@ OR_datagen_fn <- function(inputs, n = 500){
   p_side_effects_t2 <- inputs[, "p_side_effects_t2"]
   X1 <- rbinom(length(p_side_effects_t1), n, p_side_effects_t1)
   X2 <- rbinom(length(p_side_effects_t2), n, p_side_effects_t2)
+  # Create odds ratio as summary statistic
   OR <- (n - X2) / X2 / ((n - X1) / X1)
   data_save <- data.frame(OR = OR)
   return(data_save)
 }
 
-
-# EVSI calculation using the momemt matching method.
+# EVSI calculation using GAM regression.
 evsi_OR <- evsi(outputs = chemotherapy_output,
                 inputs = m_params,
                 pars = c("p_side_effects_t1", "p_side_effects_t2"),
                 n = seq(500, 1500, by = 200),
                 method = "gam",
                 datagen_fn = OR_datagen_fn,
-                model_fn = calculate_costs_effects,
-                analysis_fn = OR_analysis_fn, 
                 par_fn = generate_psa_parameters)
 
 #### STUDY 2: Randomised Trial with Multiple Outcomes ####
@@ -115,7 +108,7 @@ full_datagen_fn <- function(inputs, n = 500){
   return(data_save_dat)
 }
 
-# EVSI calculation using the momemt matching method.
+# EVSI calculation using MARS regression - large number of parameters.
 evsi_OR_allout <- evsi(outputs = chemotherapy_output,
                        inputs = m_params,
                        pars = c("p_side_effects_t1", "p_side_effects_t2",
@@ -124,8 +117,7 @@ evsi_OR_allout <- evsi(outputs = chemotherapy_output,
                        n = seq(500, 1500, by = 200),
                        method = "earth",
                        datagen_fn = full_datagen_fn,
-                       par_fn = generate_psa_parameters,
-                       npreg_method = "inla")
+                       par_fn = generate_psa_parameters)
 
 #### STUDY 3: Long-term Survival ####
 longterm_datagen_fn <- function(inputs, n = 40000){
@@ -134,20 +126,13 @@ longterm_datagen_fn <- function(inputs, n = 40000){
   return(data.frame(surv_sum = sum_of_surv))
 }
 
-# EVSI calculation using the momemt matching method.
+# EVSI calculation using GAM regression.
 evsi_longterm <- evsi(outputs = chemotherapy_output,
                       inputs = m_params,
                       pars = c("rate_longterm"),
                       n = seq(40000, 50000, by = 500),
                       method = "gam",
                       datagen_fn = longterm_datagen_fn,
-                      model_fn = calculate_costs_effects,
-                      analysis_args = list(n = 40000,
-                                           gammaPar = gammaPar,
-                                           rate_longterm_mu = rate_longterm_mu,
-                                           rate_longterm_sd = rate_longterm_sd,
-                                           n.iter = 2000),
-                      analysis_fn = longterm_analysis_fn, 
                       par_fn = generate_psa_parameters)
 
 #### STUDY 4: Retrospective Study of Hospital Data ####
@@ -173,7 +158,7 @@ retrohosp_datagen_fn <- function(inputs, n = 500){
   return(data_save_dat)
 }
 
-# EVSI calculation using the momemt matching method.
+# EVSI calculation using GAM regression
 evsi_retrohosp <- evsi(outputs = chemotherapy_output,
                        inputs = m_params,
                        pars = c("p_died", "lambda_hosp"),
@@ -216,7 +201,7 @@ registry_datagen_fn <- function(inputs, n = 500){
   return(data_save_dat)
 }
 
-# EVSI calculation using the momemt matching method.
+# EVSI calculation using GAM regression
 evsi_registry <- evsi(outputs = chemotherapy_output,
                       inputs = m_params,
                       pars = c("p_hospitalised_total","p_died", "lambda_home",
@@ -267,6 +252,8 @@ cost_datagen_fn <- function(inputs, n = 500,
     X_hospital[i, ] <- rlnorm(n[1], par_hospital$meanlog, par_hospital$sdlog)
     X_death[i, ] <- rlnorm(n[1], par_death$meanlog, par_death$sdlog)
     
+    ## Sufficient statistics for the log-normal distribution
+    # Data provides information on mean and variance of log-normal
     X_home_care_suff1[i] <- sum(log(X_home_care[i, ]))
     X_home_care_suff2[i] <- sum(log(X_home_care[i, ])^2)
     X_hospital_suff1[i] <- sum(log(X_hospital[i, ]))
@@ -285,7 +272,7 @@ cost_datagen_fn <- function(inputs, n = 500,
   return(data_save_dat)
 }
 
-# EVSI calculation using the momemt matching method.
+# EVSI calculation using MARS regression due to large number of parameters.
 evsi_costs <- evsi(outputs = chemotherapy_output,
                    inputs = m_params,
                    pars = c("c_home_care", "c_hospital", "c_death"),
@@ -340,6 +327,7 @@ utility_datagen_fn <- function(inputs, n = 500,
     X_home_care[i, ] <- rbeta(n[1], par_home_care$alpha, par_home_care$beta)
     X_hospital[i, ] <- rbeta(n[1], par_hospital$alpha, par_hospital$beta)
     
+    ## Sufficient statistic for beta distribution is geometric mean of X and (1-X)
     X_recovery_mean1[i] <- gm_mean(X_recovery[i, ])
     X_recovery_mean2[i] <- gm_mean(1 - X_recovery[i, ])
     
@@ -361,7 +349,7 @@ utility_datagen_fn <- function(inputs, n = 500,
   return(data_save_dat)
 }
 
-# EVSI calculation using the momemt matching method.
+# EVSI calculation using MARS regression due to large number of parameters.
 evsi_utility <- evsi(outputs = chemotherapy_output,
                      inputs = m_params,
                      pars = c("u_recovery", "u_home_care", "u_hospital"),
