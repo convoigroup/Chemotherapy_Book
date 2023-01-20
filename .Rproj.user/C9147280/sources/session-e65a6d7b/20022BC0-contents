@@ -1,0 +1,8 @@
+r <- 0.005
+r*90
+
+r <- 0.005 + log(1.2)
+r*90
+integrate(function(x){dexp(x, rate = r)}, lower = 0, upper = 90)
+
+power.t.test(delta = 10, sd = 4, power = 0.8)
