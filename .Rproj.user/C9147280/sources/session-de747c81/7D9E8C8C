@@ -1,0 +1,26 @@
+{
+    "id": "7D9E8C8C",
+    "path": "~/GitHub/Chemotherapy_Book/02_data/02_Assumption_Inputs.R",
+    "project_path": "02_data/02_Assumption_Inputs.R",
+    "type": "r_source",
+    "hash": "521282106",
+    "contents": "",
+    "dirty": false,
+    "created": 1677859511735.0,
+    "source_on_save": false,
+    "relative_order": 7,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "5,18",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1677859523,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1677859523139,
+    "read_only": false,
+    "read_only_alternatives": []
+}

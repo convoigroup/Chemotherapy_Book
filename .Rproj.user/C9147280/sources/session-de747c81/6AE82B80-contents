@@ -1,0 +1,164 @@
+#######################################################################
+### Expected Value of Sample Information Analysis - Example         ###
+#######################################################################
+### Packages
+library(voi)
+library(ggplot2)
+library(dplyr)
+library(R2jags)
+
+## Run the model
+source("04_analysis/02_baseline_model_output.R")
+
+## Baseline Cost-Effectiveness Formatting
+# The output from the cost-effectiveness model should be formatted for 
+# the voi package.
+# Use BCEA package to create a cost-effectiveness object.
+chemotherapy_output <- list(e = m_costs_effects[, "Effects", ],
+                            c = m_costs_effects[, "Costs", ],
+                            k = seq(0, 50000, length.out = 501))
+
+# Data generation function
+utility_datagen_fn <- function(inputs, n = 500,
+                               sd_hospital_fun = function(){return(runif(1, 0.00001, 0.01))}
+){
+  betaPar <- function(m, s) {
+    var <- s ^ 2
+    alpha <- ((1 - m) / var - 1 / m) * m ^ 2
+    beta <- alpha * (1 / m - 1)
+    return(
+      list(alpha = alpha, beta = beta)
+    )
+  }
+  # Load the data
+  X_hospital <- matrix(NA, nrow = dim(inputs)[1], ncol = n[1])
+  for(i in 1:dim(inputs)[1]){
+    set.seed(123 + i)
+    m_hospital <- inputs[i, "u_hospital"]
+    sd_hospital <- sd_hospital_fun()
+    par_hospital <- betaPar(m_hospital, sd_hospital)
+    # Simulate the costs 
+    X_hospital[i, ] <- rbeta(n[1], par_hospital$alpha, par_hospital$beta)
+  }
+  data_save_dat <- data.frame(X_hospital = X_hospital)
+  return(data_save_dat)
+}
+
+# Data generation function - Regression Based
+utility_datagen_fn_rb <- function(inputs, n = 500,
+                                  sd_hospital_fun = function(){return(runif(1, 0.00001, 0.01))}
+){
+  betaPar <- function(m, s) {
+    var <- s ^ 2
+    alpha <- ((1 - m) / var - 1 / m) * m ^ 2
+    beta <- alpha * (1 / m - 1)
+    return(
+      list(alpha = alpha, beta = beta)
+    )
+  }
+  
+  # Calculate geometric mean
+  gm_mean = function(x, na.rm=TRUE){
+    exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+  }
+  
+  # Load the data
+  X_hospital <- matrix(NA, nrow = dim(inputs)[1], ncol = n[1])
+  X_hospital_mean1 <- X_hospital_mean2 <- vector("numeric", length = dim(inputs)[1])
+  for(i in 1:dim(inputs)[1]){
+    set.seed(123 + i)
+    m_hospital <- inputs[i, "u_hospital"]
+    sd_hospital <- sd_hospital_fun()
+    par_hospital <- betaPar(m_hospital, sd_hospital)
+    # Simulate the costs 
+    X_hospital[i, ] <- rbeta(n[1], par_hospital$alpha, par_hospital$beta)
+    X_hospital_mean1[i] <- gm_mean(X_hospital[i, ])
+    X_hospital_mean2[i] <- gm_mean(1 - X_hospital[i, ])
+  }
+  
+  data_save_dat <- data.frame(cbind(X_hospital_mean1 = X_hospital_mean1,
+                                    X_hospital_mean2 = X_hospital_mean2))
+  return(data_save_dat)
+}
+
+## Regression Based Method
+evsi_utility <- evsi(outputs = chemotherapy_output,
+                     inputs = m_params,
+                     pars = c("u_hospital"),
+                     n = seq(50, 1000, by = 200),
+                     method = "gam",
+                     datagen_fn = utility_datagen_fn_rb)
+
+
+# Analysis function based on JAGS
+utility_analysis_fn <- function(data, args, pars){
+  # Create the data list for JAGS
+  data_jags <- list(X_hospital = as.vector(data),
+                    n = args$n,
+                    alpha_hospital = args$betaPar(
+                      args$u_hospital_mu,
+                      args$u_hospital_sd
+                    )$alpha,
+                    beta_hospital = args$betaPar(
+                      args$u_hospital_mu,
+                      args$u_hospital_sd
+                    )$beta)
+  
+  trial <- function(){
+    for(i in 1:n){
+      X_hospital[i] ~ dbeta(a_hospital, b_hospital)
+    }
+    
+    u_hospital ~ dbeta(alpha_hospital, beta_hospital)
+    sd_hospital ~ dunif(0.00001, 0.01)
+    
+    v_hospital <- sd_hospital ^ 2
+    a_hospital <- ((1 - u_hospital) / v_hospital - 1 / u_hospital) * u_hospital ^ 2
+    b_hospital <- a_hospital * (1 / u_hospital - 1)
+  }
+  
+  filein <- file.path(tempdir(),fileext="datmodel.txt")
+  R2OpenBUGS::write.model(trial,filein)
+  
+  # Perform the MCMC simulation with OpenBUGS.
+  # Close OpenBUGS once it has finished (if debug is set to TRUE)
+  bugs.data <- jags(
+    data =  data_jags,
+    parameters.to.save = pars,
+    model.file = filein, 
+    n.chains = 1, 
+    n.iter = args$n.iter, 
+    n.thin = 1, 
+    n.burnin = 250, progress.bar = "none") 
+  
+  return(data.frame(u_hospital = bugs.data$BUGSoutput$sims.matrix[, "u_hospital"]))
+}
+
+analysis_args <- list(n = 30,
+                      betaPar = betaPar,
+                      u_recovery_mu = u_recovery_mu,
+                      u_recovery_sd = u_recovery_sd,
+                      u_home_care_mu = u_home_care_mu,
+                      u_home_care_sd = u_home_care_sd,
+                      u_hospital_mu = u_hospital_mu,
+                      u_hospital_sd = u_hospital_sd,
+                      n.iter = 2000)
+
+evsi_utility <- evsi(outputs = chemotherapy_output,
+                     inputs = m_params,
+                     pars = c("u_hospital"),
+                     n = seq(30, 1000, by = 200),
+                     method = "mm",
+                     datagen_fn = utility_datagen_fn,
+                     model_fn = calculate_costs_effects,
+                     analysis_args = analysis_args,
+                     analysis_fn = utility_analysis_fn, 
+                     par_fn = generate_psa_parameters,
+                     Q = 50)
+
+## Importance Sampling
+?evsi
+x <- utility_datagen_fn(m_params)
+
+
+exp(sum(dbeta(as.numeric(t(x[1, ])), 0.37, 1, log = TRUE)))

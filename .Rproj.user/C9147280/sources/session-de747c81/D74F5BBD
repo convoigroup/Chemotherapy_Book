@@ -1,9 +1,9 @@
 {
     "id": "D74F5BBD",
-    "path": "C:/Users/Anna Heath/Documents/GitHub/Chemotherapy_Book/04_analysis/05_Expected_Value_of_Sample_Information_RB.R",
+    "path": "~/GitHub/Chemotherapy_Book/04_analysis/05_Expected_Value_of_Sample_Information_RB.R",
     "project_path": "04_analysis/05_Expected_Value_of_Sample_Information_RB.R",
     "type": "r_source",
-    "hash": "1265548601",
+    "hash": "0",
     "contents": "",
     "dirty": false,
     "created": 1674228535352.0,
@@ -13,15 +13,15 @@
         "tempName": "Untitled1",
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "361,0",
-        "scrollLine": "110"
+        "cursorPosition": "345,36",
+        "scrollLine": "0"
     },
-    "folds": "66|45|108|0|\n139|50|158|0|\n219|2|272|0|\n220|30|232|2|\n289|2|349|0|\n",
-    "lastKnownWriteTime": 1674250669,
+    "folds": "208|2|261|0|\n",
+    "lastKnownWriteTime": 1675116724,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1674250669456,
+    "last_content_update": 1675116724898,
     "read_only": false,
     "read_only_alternatives": []
 }

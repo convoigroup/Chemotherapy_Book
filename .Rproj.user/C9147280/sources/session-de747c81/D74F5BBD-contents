@@ -21,24 +21,13 @@ chemotherapy_output <- list(e = m_costs_effects[, "Effects", ],
 ## EVSI Calculations
 #### STUDY 1: Randomised Trial for Log-Odds ratio ####
 ## Using the default trials in the voi package
-
-# A randomised trial for binary outcomes requires a beta prior distribution
-# Beta prior for standard care is set using the number of events
-beta_params_t1 <- c(1 + n_side_effects, 
-                    1 + n_patients - n_side_effects)
-# Beta prior for the novel intervention is approximated from the mean and 
-# standard deviation of the PA distribution for the probability of side effects.
-beta_params_t2 <- betaPar(mean(m_params$p_side_effects_t2),
-                          sd(m_params$p_side_effects_t2))
-
 # EVSI calculation with GAM regression
 evsi_default <- evsi(outputs = chemotherapy_output,
                      inputs = m_params,
                      study = "trial_binary",
                      pars = c("p_side_effects_t1", "p_side_effects_t2"),
                      n = seq(500, 1500, by = 200),
-                     method = "gam",
-                     par_fn = generate_psa_parameters)
+                     method = "gam")
 
 # Using a bespoke analysis function - trial only updates odds ratio.
 # Data generation function
@@ -355,7 +344,6 @@ evsi_utility <- evsi(outputs = chemotherapy_output,
                      pars = c("u_recovery", "u_home_care", "u_hospital"),
                      n = seq(30, 1000, by = 200),
                      method = "earth",
-                     datagen_fn = utility_datagen_fn,
-                     par_fn = generate_psa_parameters)
+                     datagen_fn = utility_datagen_fn)
 
 
