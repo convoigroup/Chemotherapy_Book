@@ -54,4 +54,4 @@ rate_longterm_sd <- sqrt(0.001)
 
 ## Drug costs
 c_treatment_1 <- 120
-c_treatment_2 <- 6250
+c_treatment_2 <- 2250
