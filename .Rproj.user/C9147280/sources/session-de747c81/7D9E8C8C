@@ -3,7 +3,7 @@
     "path": "~/GitHub/Chemotherapy_Book/02_data/02_Assumption_Inputs.R",
     "project_path": "02_data/02_Assumption_Inputs.R",
     "type": "r_source",
-    "hash": "3935470842",
+    "hash": "0",
     "contents": "",
     "dirty": false,
     "created": 1677859511735.0,
@@ -12,15 +12,15 @@
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "56,18",
+        "cursorPosition": "56,17",
         "scrollLine": "26"
     },
     "folds": "",
-    "lastKnownWriteTime": 1677859694,
+    "lastKnownWriteTime": 1677861148,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1677859694634,
+    "last_content_update": 1677861148690,
     "read_only": false,
     "read_only_alternatives": []
 }
