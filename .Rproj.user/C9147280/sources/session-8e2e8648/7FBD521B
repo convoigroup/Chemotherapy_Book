@@ -1,27 +1,27 @@
 {
-    "id": "474C12E7",
+    "id": "7FBD521B",
     "path": "~/GitHub/Chemotherapy_Book/04_analysis/05_Expected_Value_of_Sample_Information_MM.R",
     "project_path": "04_analysis/05_Expected_Value_of_Sample_Information_MM.R",
     "type": "r_source",
     "hash": "0",
     "contents": "",
     "dirty": false,
-    "created": 1664285222861.0,
+    "created": 1678467824704.0,
     "source_on_save": false,
-    "relative_order": 1,
+    "relative_order": 5,
     "properties": {
         "tempName": "Untitled1",
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "19,0",
-        "scrollLine": "0"
+        "cursorPosition": "47,0",
+        "scrollLine": "38"
     },
-    "folds": "49|43|56|0|\n59|45|111|0|\n172|47|273|0|\n199|40|246|2|\n459|49|489|0|\n492|51|561|0|\n",
+    "folds": "",
     "lastKnownWriteTime": 1674857049,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1674857049187,
+    "last_content_update": 1674857049,
     "read_only": false,
     "read_only_alternatives": []
 }

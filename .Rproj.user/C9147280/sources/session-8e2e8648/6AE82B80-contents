@@ -89,6 +89,7 @@ evsi_utility <- evsi(outputs = chemotherapy_output,
                      method = "gam",
                      datagen_fn = utility_datagen_fn_rb)
 
+which(table(evsi_OR[,c("n", "k")])!=1)
 
 # Analysis function based on JAGS
 utility_analysis_fn <- function(data, args, pars){
@@ -157,8 +158,114 @@ evsi_utility <- evsi(outputs = chemotherapy_output,
                      Q = 50)
 
 ## Importance Sampling
-?evsi
 x <- utility_datagen_fn(m_params)
 
 
-exp(sum(dbeta(as.numeric(t(x[1, ])), 0.37, 1, log = TRUE)))
+## Plotting
+# Using a bespoke analysis function - trial only updates odds ratio.
+# Data generation function
+OR_datagen_fn <- function(inputs, n = 500){
+  p_side_effects_t1 <- inputs[, "p_side_effects_t1"]
+  p_side_effects_t2 <- inputs[, "p_side_effects_t2"]
+  X1 <- rbinom(length(p_side_effects_t1), n, p_side_effects_t1)
+  X2 <- rbinom(length(p_side_effects_t2), n, p_side_effects_t2)
+  # Create odds ratio as summary statistic
+  OR <- (n - X2) / X2 / ((n - X1) / X1)
+  data_save <- data.frame(OR = OR)
+  return(data_save)
+}
+
+
+# EVSI calculation using GAM regression.
+evsi_OR <- evsi(outputs = chemotherapy_output,
+                inputs = m_params,
+                pars = c("logor_side_effects"),
+                pars_datagen = c("p_side_effects_t1", "p_side_effects_t2"),
+                n = seq(50, 500, by = 10),
+                method = "gam",
+                datagen_fn = OR_datagen_fn,
+                par_fn = generate_psa_parameters)
+
+
+# Using a bespoke analysis function - trial only updates odds ratio.
+# Data generation function
+OR_datagen_fn <- function(inputs, n = 500){
+  p_side_effects_t1 <- inputs[, "p_side_effects_t1"]
+  p_side_effects_t2 <- inputs[, "p_side_effects_t2"]
+  X1 <- rbinom(length(p_side_effects_t1), n, p_side_effects_t1)
+  X2 <- rbinom(length(p_side_effects_t2), n, p_side_effects_t2)
+  data_save <- data.frame(X1 = X1, X2 = X2)
+  return(data_save)
+}
+
+# Analysis function based on JAGS
+OR_analysis_fn <- function(data, args, pars){
+  X1 <- data$X1
+  X2 <- data$X2
+  
+  data_jags <- list(X1 = X1,
+                    X2 = X2,
+                    n = args$n,
+                    n_side_effects = args$n_side_effects,
+                    n_patients = args$n_patients,
+                    logor_side_effects_mu = args$logor_side_effects_mu,
+                    logor_side_effects_sd = args$logor_side_effects_sd)
+  
+  LogOR_trial <- function(){
+    # Probability of side effects under treatment 1
+    p_side_effects_t1 ~ dbeta(1 + n_side_effects, 
+                              1 + n_patients - n_side_effects)
+    
+    # Log odds of side effects on treatment 2
+    logor_side_effects ~ dnorm(logor_side_effects_mu, logor_side_effects_sd)
+    # Odds of side effects on treatment 1
+    odds_side_effects_t1 <- p_side_effects_t1 / (1 - p_side_effects_t1)
+    # Odds for side effects on treatment 2
+    odds_side_effects_t2 <- odds_side_effects_t1 * exp(logor_side_effects)
+    
+    # Probability of side effects under treatment 2
+    p_side_effects_t2    <- odds_side_effects_t2 / (1 + odds_side_effects_t2)
+    
+    X1 ~ dbin(p_side_effects_t1, n)
+    X2 ~ dbin(p_side_effects_t2, n)
+  }
+  
+  filein <- file.path(tempdir(),fileext="datmodel.txt")
+  R2OpenBUGS::write.model(LogOR_trial,filein)
+  
+  # Perform the MCMC simulation with OpenBUGS.
+  # Close OpenBUGS once it has finished (if debug is set to TRUE)
+  bugs.data <- jags(
+    data =  data_jags,
+    parameters.to.save = pars,
+    model.file = filein, 
+    n.chains = 3, 
+    n.iter = args$n.iter, 
+    n.thin = 1, 
+    n.burnin = 250, progress.bar = "none") 
+  
+  # Resample treatment 1 from the prior as study will not updated t1
+  resample_t1 <- rbeta(length(bugs.data$BUGSoutput$sims.matrix[, pars[2]]),
+                       1 + args$n_side_effects,
+                       1 + args$n_patients - args$n_side_effects)
+  
+  return(data.frame(p_side_effects_t1 = resample_t1,
+                    p_side_effects_t2 = bugs.data$BUGSoutput$sims.matrix[, pars[2]]))
+}
+
+# EVSI calculation using the momemt matching method.
+evsi_OR <- evsi(outputs = chemotherapy_output,
+                inputs = m_params,
+                pars = c("p_side_effects_t1", "p_side_effects_t2"),
+                n = seq(50, 500, by = 10),
+                method = "mm",
+                datagen_fn = OR_datagen_fn,
+                model_fn = calculate_costs_effects,
+                analysis_args = list(n_side_effects = n_side_effects,
+                                     n_patients = n_patients,
+                                     n = 500,
+                                     logor_side_effects_mu = logor_side_effects_mu,
+                                     logor_side_effects_sd = logor_side_effects_sd,
+                                     n.iter = 7500),
+                analysis_fn = OR_analysis_fn, 
+                par_fn = generate_psa_parameters)
