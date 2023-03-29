@@ -56,7 +56,7 @@ ggsave("06_figs/EVPPI_ICER.pdf")
 
 
 ## Calculate standard errors
-pars_small <- list("u_home_care", "lambda_hosp", "u_hospital", "lambda_home")
+pars_small <- list("p_side_effects_t1", "p_hospitalised_total", "lambda_hosp")
 nb <- wtp.max * chemotherapy_output$e - chemotherapy_output$c
 ev_small_se <- evppi(outputs=nb, inputs=m_params, pars=pars_small,
                      se = TRUE)
@@ -68,12 +68,12 @@ EVPI <- EVPI %>%
 
 ev_single %>%
   filter(pars %in%c("logor_side_effects",
-                    "rate_longterm",
                     "u_home_care",
-                    "p_side_effects_t2",
-                    "lambda_hosp",
-                    "u_hospital",
-                    "u_recovery")) %>%
+                    "p_died",
+                    "rate_longterm",
+                    "p_side_effects_t1",
+                    "p_hospitalised_total",
+                    "lambda_hosp")) %>%
   ggplot(aes(x=k, y=evppi, group=pars, col = pars)) +
   geom_line() + 
   geom_line(data = EVPI, aes(x = k, y = evpi), linetype = "dashed") + 
@@ -92,7 +92,8 @@ par_RCT <- list(
                                    "p_hospitalised_total","p_died",
                                    "lambda_home","lambda_hosp")
 )
-ev_RCT <- evppi(outputs=chemotherapy_output, inputs=m_params, pars=par_RCT)
+ev_RCT <- evppi(outputs=chemotherapy_output, inputs=m_params, pars=par_RCT,
+                method = "earth")
 
 
 # Explore at maximum willingness to pay
@@ -120,7 +121,8 @@ par_groups <- list(
   "costs" = c("c_home_care","c_hospital","c_death"),
   "utilities" = c("u_recovery","u_home_care","u_hospital")
 )
-ev_groups <- evppi(outputs=chemotherapy_output, inputs=m_params, pars=par_groups)
+ev_groups <- evppi(outputs=chemotherapy_output, inputs=m_params, pars=par_groups,
+                   method = "earth")
 
 # Explore EVPPI at maximum uncertainty
 ev_groups %>%
@@ -140,6 +142,7 @@ ev_groups %>%
   geom_line(data = EVPI, aes(x = k, y = evpi), linetype = "dashed") + 
   theme_bw()
 
+ggsave("06_figs/EVPPI_groups.pdf")
 
 ## Population Level EVPPI
 pop_size <- 46000 * c(sum(1 / (1 + 0.035)^(0:5)),
@@ -153,4 +156,3 @@ ev_groups  %>%
          evppi_10Y = evppi * pop_size[2],
          evppi_15Y = evppi * pop_size[3])
 
-ggsave("06_figs/EVPPI_groups.pdf")

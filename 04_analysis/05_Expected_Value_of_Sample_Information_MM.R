@@ -36,7 +36,7 @@ evsi_default <- evsi(outputs = chemotherapy_output,
                      inputs = m_params,
                      study = "trial_binary",
                      pars = c("p_side_effects_t1", "p_side_effects_t2"),
-                     n = seq(500, 1500, by = 200),
+                     n = seq(50, 1500, by = 50),
                      method = "mm",
                      model_fn = calculate_costs_effects,
                      analysis_args = list(a1 = beta_params_t1[1],
@@ -49,7 +49,16 @@ evsi_default <- evsi(outputs = chemotherapy_output,
 # Data generation function
 OR_datagen_fn <- function(inputs, n = 500){
   p_side_effects_t1 <- inputs[, "p_side_effects_t1"]
-  p_side_effects_t2 <- inputs[, "p_side_effects_t2"]
+  logor_side_effects <- inputs[, "logor_side_effects"]
+  
+  # Odds for side effects for treatment 1
+  odds_side_effects_t1 <- p_side_effects_t1 / (1 - p_side_effects_t1)
+  # Odds for side effects on treatment 2
+  odds_side_effects_t2 <- odds_side_effects_t1 * exp(logor_side_effects)
+  # Probability of side effects under treatment 2
+  p_side_effects_t2    <- odds_side_effects_t2 / (1 + odds_side_effects_t2)
+  
+  # Data generation
   X1 <- rbinom(length(p_side_effects_t1), n, p_side_effects_t1)
   X2 <- rbinom(length(p_side_effects_t2), n, p_side_effects_t2)
   data_save <- data.frame(X1 = X1, X2 = X2)
@@ -90,32 +99,28 @@ OR_analysis_fn <- function(data, args, pars){
   
   filein <- file.path(tempdir(),fileext="datmodel.txt")
   R2OpenBUGS::write.model(LogOR_trial,filein)
-
+  
   # Perform the MCMC simulation with OpenBUGS.
   # Close OpenBUGS once it has finished (if debug is set to TRUE)
   bugs.data <- jags(
     data =  data_jags,
     parameters.to.save = pars,
     model.file = filein, 
-    n.chains = 3, 
+    n.chains = 1, 
     n.iter = args$n.iter, 
     n.thin = 1, 
     n.burnin = 250, progress.bar = "none") 
   
-  # Resample treatment 1 from the prior as study will not updated t1
-  resample_t1 <- rbeta(length(bugs.data$BUGSoutput$sims.matrix[, pars[2]]),
-                       1 + args$n_side_effects,
-                       1 + args$n_patients - args$n_side_effects)
   
-  return(data.frame(p_side_effects_t1 = resample_t1,
-         p_side_effects_t2 = bugs.data$BUGSoutput$sims.matrix[, pars[2]]))
+  return(data.frame(logor_side_effects = bugs.data$BUGSoutput$sims.matrix[, pars[1]]))
 }
 
 # EVSI calculation using the momemt matching method.
 evsi_OR <- evsi(outputs = chemotherapy_output,
                 inputs = m_params,
-                pars = c("p_side_effects_t1", "p_side_effects_t2"),
-                n = seq(500, 1500, by = 200),
+                pars = c("logor_side_effects"),
+                pars_datagen = c("p_side_effects_t1", "logor_side_effects"),
+                n = seq(50, 1500, by = 50),
                 method = "mm",
                 datagen_fn = OR_datagen_fn,
                 model_fn = calculate_costs_effects,
@@ -124,16 +129,21 @@ evsi_OR <- evsi(outputs = chemotherapy_output,
                                      n = 500,
                                      logor_side_effects_mu = logor_side_effects_mu,
                                      logor_side_effects_sd = logor_side_effects_sd,
-                                     n.iter = 5000),
+                                     n.iter = 5250),
                 analysis_fn = OR_analysis_fn, 
                 par_fn = generate_psa_parameters)
 
 #### STUDY 2: Randomised Trial with Multiple Outcomes ####
 # Data generation function
 full_datagen_fn <- function(inputs, n = 500){
-  # Load the data
   p_side_effects_t1 <- inputs[, "p_side_effects_t1"]
-  p_side_effects_t2 <- inputs[, "p_side_effects_t2"]
+  logor_side_effects <- inputs[, "logor_side_effects"]
+  # Odds for side effects for treatment 1
+  odds_side_effects_t1 <- p_side_effects_t1 / (1 - p_side_effects_t1)
+  # Odds for side effects on treatment 2
+  odds_side_effects_t2 <- odds_side_effects_t1 * exp(logor_side_effects)
+  # Probability of side effects under treatment 2
+  p_side_effects_t2 <- odds_side_effects_t2 / (1 + odds_side_effects_t2)
   p_hospitalised_total <- inputs[, "p_hospitalised_total"]
   p_died <- inputs[, "p_died"]
   lambda_home <- inputs[, "lambda_home"]
@@ -155,9 +165,13 @@ full_datagen_fn <- function(inputs, n = 500){
     
     ## Simulate recovery times for patients
     N_recover_home[i] <- X1[i] + X2[i] - X_hosp[i]
-    T_home[i, 1:N_recover_home[i]] <- rexp(N_recover_home[i], rate_recover_home[i])
+    if(N_recover_home[i] > 0){
+      T_home[i, 1:N_recover_home[i]] <- rexp(N_recover_home[i], rate_recover_home[i])
+    }
     N_recover_hospital[i] <- X_hosp[i] - X_dead[i]
-    T_hosp[i, 1:N_recover_hospital[i]] <- rexp(N_recover_hospital[i], rate_recover_hosp[i])
+    if(N_recover_hospital[i] > 0){
+      T_hosp[i, 1:N_recover_hospital[i]] <- rexp(N_recover_hospital[i], rate_recover_hosp[i])
+    }
  
   }
   
@@ -171,15 +185,31 @@ full_datagen_fn <- function(inputs, n = 500){
 
 # Analysis function based on JAGS
 full_analysis_fn <- function(data, args, pars){
+  ## Format Data - Adjust for 0 recovery times
+  T_home <- NA
+  if(data$N_recover_home > 0){
+   T_home <- as.numeric(as.matrix(data[, (1:data$N_recover_home) + 6]))
+  } 
+  
+  T_hosp <- NA
+  if(data$N_recover_hospital > 0){
+    T_hosp <- as.vector(as.matrix(data[, 
+                                       (6 + 2 * args$n) + (1:data$N_recover_hospital)]))
+  } 
+  
   # Create the data list for JAGS
   data_jags <- list(X1 = data$X1,
                     X2 = data$X2,
                     X_hosp = data$X_hosp,
                     X_dead = data$X_dead,
-                    T_home = as.vector(data[, (1:data$N_recover_home) + 6]),
-                    T_hosp = as.vector(data[, (6 + 2 * args$n) + (1:data$N_recover_hospital)]),
-                    N_recover_home = data$N_recover_home,
-                    N_recover_hosp = data$N_recover_hospital,
+                    T_home = T_home,
+                    T_hosp = T_hosp,
+                    N_recover_home = ifelse(data$N_recover_home > 0,
+                                            data$N_recover_home, 
+                                            1),
+                    N_recover_hosp = ifelse(data$N_recover_hospital > 0,
+                                            data$N_recover_hospital,
+                                            1),
                     n = args$n,
                     n_side_effects = args$n_side_effects,
                     n_patients = args$n_patients,
@@ -193,7 +223,6 @@ full_analysis_fn <- function(data, args, pars){
                                               args$p_recovery_hosp_sd)$alpha,
                     p_recovery_hosp_beta = betaPar(args$p_recovery_hosp_mu,
                                               args$p_recovery_hosp_sd)$beta,
-                    time_horizon = args$time_horizon,
                     n_died = args$n_died,
                     n_hospitalised = args$n_hospitalised)
   
@@ -255,17 +284,12 @@ full_analysis_fn <- function(data, args, pars){
     data =  data_jags,
     parameters.to.save = pars,
     model.file = filein, 
-    n.chains = 3, 
+    n.chains = 1, 
     n.iter = args$n.iter, 
     n.thin = 1, 
     n.burnin = 250, progress.bar = "none") 
-  
-  # Resample treatment 1 from the prior as study will not updated t1
-  resample_t1 <- rbeta(length(bugs.data$BUGSoutput$sims.matrix[, pars[2]]),
-                       1 + args$n_side_effects,
-                       1 + args$n_patients - args$n_side_effects)
-  
-  return(data.frame(p_side_effects_t1 = resample_t1,
+
+  return(data.frame(p_side_effects_t1 = args$p_side_effects_t1,
                     p_side_effects_t2 = bugs.data$BUGSoutput$sims.matrix[, "p_side_effects_t2"],
                     p_hospitalised_total= bugs.data$BUGSoutput$sims.matrix[, "p_hospitalised_total"],
                     p_died = bugs.data$BUGSoutput$sims.matrix[, "p_died"],
@@ -274,18 +298,18 @@ full_analysis_fn <- function(data, args, pars){
 }
 
 # EVSI calculation using the momemt matching method.
-evsi_OR_allout <- evsi(outputs = chemotherapy_output,
+evsi_OR_allout_MM <- evsi(outputs = chemotherapy_output,
                 inputs = m_params,
-                pars = c("p_side_effects_t1", "p_side_effects_t2",
+                pars = c("p_side_effects_t1", "logor_side_effects",
                          "p_hospitalised_total", "p_died",
                          "lambda_home", "lambda_hosp"),
-                n = seq(500, 1500, by = 200),
+                n = seq(50, 1500, by = 50),
                 method = "mm",
                 datagen_fn = full_datagen_fn,
                 model_fn = calculate_costs_effects,
                 analysis_args = list(n_side_effects = n_side_effects,
                                      n_patients = n_patients,
-                                     n = 500,
+                                     n = 50,
                                      logor_side_effects_mu = logor_side_effects_mu,
                                      logor_side_effects_sd = logor_side_effects_sd,
                                      betaPar = betaPar,
@@ -293,16 +317,16 @@ evsi_OR_allout <- evsi(outputs = chemotherapy_output,
                                      p_recovery_home_sd = p_recovery_home_sd,
                                      p_recovery_hosp_mu = p_recovery_hosp_mu,
                                      p_recovery_hosp_sd = p_recovery_hosp_sd,
-                                     n.iter = 5000,
-                                     time_horizon = time_horizon,
+                                     n.iter = 5250,
                                      n_died = n_died,
-                                     n_hospitalised = n_hospitalised),
+                                     n_hospitalised = n_hospitalised,
+                                     p_side_effects_t1 = m_params$p_side_effects_t1),
                 analysis_fn = full_analysis_fn, 
                 par_fn = generate_psa_parameters,
-                npreg_method = "inla")
+                npreg_method = "earth")
 
 #### STUDY 3: Long-term Survival ####
-longterm_datagen_fn <- function(inputs, n = 40000){
+longterm_datagen_fn <- function(inputs, n = 46000){
   rate_longterm <- inputs[, "rate_longterm"]
   sum_of_surv <- rgamma(dim(inputs)[1], shape = 2 * n, scale = n / rate_longterm)
   return(data.frame(surv_sum = sum_of_surv))
@@ -326,7 +350,7 @@ longterm_analysis_fn <- function(data, args, pars){
   
   longterm_jags <- function(){
     ## Models for the data
-    surv_sum ~ dgamma(2 * n, n / rate_longterm)
+    surv_sum ~ dgamma(2 * n, rate_longterm / n)
     rate_longterm ~ dgamma(alpha_rate, beta_rate)
   }
   
@@ -352,7 +376,7 @@ longterm_analysis_fn <- function(data, args, pars){
 evsi_longterm <- evsi(outputs = chemotherapy_output,
                        inputs = m_params,
                        pars = c("rate_longterm"),
-                       n = seq(40000, 50000, by = 500),
+                       n = 46000,
                        method = "mm",
                        datagen_fn = longterm_datagen_fn,
                        model_fn = calculate_costs_effects,
@@ -363,6 +387,9 @@ evsi_longterm <- evsi(outputs = chemotherapy_output,
                                             n.iter = 2000),
                        analysis_fn = longterm_analysis_fn, 
                        par_fn = generate_psa_parameters)
+
+plotting <- evsi.plot.adapt(chemotherapy_output, m_params, c("rate_longterm"), 
+                            evsi_longterm, "gam")
 
 #### STUDY 4: Retrospective Study of Hospital Data ####
 # Data generation function
@@ -862,11 +889,11 @@ undebug(evsi)
 evsi_utility <- evsi(outputs = chemotherapy_output,
                    inputs = m_params,
                    pars = c("u_recovery", "u_home_care", "u_hospital"),
-                   n = seq(30, 1000, by = 200),
+                   n = seq(50, 1500, by = 50),
                    method = "mm",
                    datagen_fn = utility_datagen_fn,
                    model_fn = calculate_costs_effects,
-                   analysis_args = list(n = 20,
+                   analysis_args = list(n = 50,
                                         betaPar = betaPar,
                                         u_recovery_mu = u_recovery_mu,
                                         u_recovery_sd = u_recovery_sd,
@@ -874,9 +901,19 @@ evsi_utility <- evsi(outputs = chemotherapy_output,
                                         u_home_care_sd = u_home_care_sd,
                                         u_hospital_mu = u_hospital_mu,
                                         u_hospital_sd = u_hospital_sd,
-                                        n.iter = 2000),
+                                        n.iter = 5000),
                    analysis_fn = utility_analysis_fn, 
                    par_fn = generate_psa_parameters,
                    Q = 50)
 
+plotting <- evsi.plot.adapt(chemotherapy_output, m_params, c("u_recovery", "u_home_care", "u_hospital"), 
+                            evsi_utility, "earth")
+evsi.wtp.plot(plotting)
+pop.adjust <- 46000 * (1 / (1 + 0.035)^3)
+evsi.enbs.plot(plotting, c(1260000, 1400000), 2 * c(1560.55, 1600), 
+               k = 20000, Pop = pop.adjust, Time = 10)
+optim.ss(plotting, c(1260000, 1400000), 2 * c(1560.55, 1600), 
+         k = 20000, Pop = pop.adjust, Time = 10)
+coss(plotting, c(1260000, 1400000), 2 * c(1560.55, 1600), 
+     Pop = pop.adjust, Time = 10)
 

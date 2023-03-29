@@ -1,3 +1,6 @@
+##### Example To Test Plotting #####
+### Function to translate the output from the evsi command (evsi.obj) into
+### an object to plot
 evsi.plot.adapt <- function (ouputs, inputs, pars, evsi.obj, method) 
 {
   if (is.null(evsi.obj)) {
@@ -14,7 +17,7 @@ evsi.plot.adapt <- function (ouputs, inputs, pars, evsi.obj, method)
   return(to.return)
 }
 
-
+### Plots evsi across willingess to pay. Originally plot.evsi in EVSI package
 evsi.wtp.plot <- function (evsi, pos = c(0, 0.8), N = NULL) 
 {
   if (class(evsi) != "evsi.plot") {
@@ -64,7 +67,7 @@ evsi.wtp.plot <- function (evsi, pos = c(0, 0.8), N = NULL)
        xlim = range(range(evsi$evpi$k), range(evsi$evppi$k), 
                     range(evsi$attrib$k)),
   col = "black")
-    points(evsi$evppi$k, evsi$evppi$evppi, t = "l", col = col, 
+    points(evsi$evppi$k, evsi$evppi$evppi, t = "l", col = "black", 
            lty = 1)
     colours <- colorRampPalette(colors = c("skyblue", "blue", "darkblue"))(select.length)
     if (length(evsi$attrib$k) < 30) {
@@ -92,6 +95,8 @@ evsi.wtp.plot <- function (evsi, pos = c(0, 0.8), N = NULL)
     box()
 }
 
+### Plots evsi across sample size for a fixed willingness to pay. 
+### Originally plot.samplesize in EVSI package
 evsi.ss.plot <- function (evsi, k = NULL, pos = c("bottomright")) 
 {
   alt.legend <- pos
@@ -151,17 +156,22 @@ evsi.ss.plot <- function (evsi, k = NULL, pos = c("bottomright"))
   box()
 }
 
+### Calculates the ENBS (internal function)
 ENBS.fun <- function(evsi, Pop, Time, Dis, cost) {
   enbs <- evsi * Pop/Dis * (1 - exp(-Dis * Time)) - cost
   return(enbs)
 }
 
+### Calculates the standard devation for the ENBS to account for unknown costs
+### (internal function)
 ENBS.sd.calc <- function(evsi.sd, Pop, Time, Dis, cost.sd) {
   var <- (Pop/Dis * (1 - exp(-Dis * Time)))^2 * evsi.sd^2 + 
     cost.sd^2
   return(sqrt(var))
 }
 
+### Plots the probability of a cost-effective trial as a sentivity analysis
+### to time horizon and population size. Originally plot.prob.ce in EVSI package
 evsi.prob.plot <- function (evsi, trial.cost = NULL, setup = NULL, pp = NULL, 
           Pop = c(0, 10000), Time = c(1, 20), Dis = 0.035, k = NULL, N = NULL, 
           pos = c("topright")) 
@@ -270,7 +280,8 @@ evsi.prob.plot <- function (evsi, trial.cost = NULL, setup = NULL, pp = NULL,
                                        box()
 }
 
-
+### Determines the optimal sample size of the study/
+### Originally optim.samplesize in EVSI package
 optim.ss <- function (evsi, setup, pp, Pop, Time, k = NULL, Dis = 0.035) 
 {
   if (!(class(k) %in% c("numeric" , "integer"))) {
@@ -323,6 +334,8 @@ optim.ss <- function (evsi, setup, pp, Pop, Time, k = NULL, Dis = 0.035)
   return(list(SS.max = N.max, ENBS = ENBS.max, SS.I = N.range))
 }
 
+### Plots ENBS across sample size for fixed WTP/population size and time horizon
+### Originally plot.enbs in EVSI package
 evsi.enbs.plot <- function (evsi, setup, pp, Pop = 10000, Time = 10, 
                             Dis = 0.035, k = NULL, N = NULL, pos = c("bottomright")) 
 {
@@ -441,6 +454,9 @@ evsi.enbs.plot <- function (evsi, setup, pp, Pop = 10000, Time = 10,
                                               lwd = 3)
 }
 
+### Plots the curve of optimal sample size.
+### Not in the EVSI package but function structure and argument names match to
+### the other functions
 coss <-  function (evsi, setup, pp, Pop = 10000, Time = 10, 
                    Dis = 0.035, N = NULL, pos = c("bottomright")) 
 {
@@ -505,14 +521,3 @@ coss <-  function (evsi, setup, pp, Pop = 10000, Time = 10,
   
 }
 
-
-plotting <- evsi.plot.adapt(chemotherapy_output, m_params, c("logor_side_effects"), evsi_OR, "gam")
-
-evsi.wtp.plot(plotting)
-evsi.wtp.plot(plotting, N = 250)
-evsi.ss.plot(plotting)
-evsi.prob.plot(plotting, setup = c(5e6, 1e7), pp = c(28000,42000), k = 20000, 
-               N = 250, Pop = c(0,60000), Time = c(0,10))
-evsi.enbs.plot(plotting, c(5e6, 1e7), c(28000,42000), 
-               k = 20000, Pop = 46000, Time = 5)
-coss(plotting, c(5e6, 1e7), c(28000,42000), Pop = 46000, Time = 5)

@@ -5,7 +5,7 @@
 ## Function to generate the PSA parameters
 generate_psa_parameters <- function(n){
   # n: The number of PSA simulations to be drawn
-  
+  set.seed(123)
   # Probability of side effects under treatment 1
   p_side_effects_t1 <- rbeta(n, 
                              1 + n_side_effects, 
