@@ -53,7 +53,7 @@ evsi_utility <- evsi(outputs = chemotherapy_output,
                      pars = c("u_hospital"),
                      n = seq(50, 1000, by = 200),
                      method = "gam",
-                     datagen_fn = utility_datagen_fn_rb)
+                     datagen_fn = utility_datagen_fn_agg)
 
 ## Moment Matching Method
 # Analysis function based on JAGS
