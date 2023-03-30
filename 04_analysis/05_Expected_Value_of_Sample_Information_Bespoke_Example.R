@@ -9,6 +9,7 @@ library(R2jags)
 
 ## Run the model
 source("04_analysis/02_baseline_model_output.R")
+source("03_R/01_misc_functions.R")
 
 ## Baseline Cost-Effectiveness Formatting
 # The output from the cost-effectiveness model should be formatted for 
@@ -18,67 +19,33 @@ chemotherapy_output <- list(e = m_costs_effects[, "Effects", ],
                             c = m_costs_effects[, "Costs", ],
                             k = seq(0, 50000, length.out = 501))
 
-# Data generation function - Regression Based
-utility_datagen_fn_rb <- function(inputs, n = 500,
-                                  sd_hospital_fun = function(){return(runif(1, 0.00001, 0.4))}
-){
-
-  # Load the data
-  X_hospital <- matrix(NA, nrow = dim(inputs)[1], ncol = n[1])
-  X_hospital_mean <- vector("numeric", length = dim(inputs)[1])
-  for(i in 1:dim(inputs)[1]){
-    set.seed(123 + i)
-    m_hospital <- inputs[i, "u_hospital"]
-    sd_hospital <- sd_hospital_fun()
-    # Simulate the costs 
-    X_hospital[i, ] <- truncnorm::rtruncnorm(n[1], mean = m_hospital, sd = sd_hospital,
-                                             a = -Inf, b = 1)
-    X_hospital_mean[i] <- mean(X_hospital[i, ])
-  }
-  
-  data_save_dat <- data.frame(cbind(X_hospital_mean = X_hospital_mean))
+# Data generation function - aggregate data (for regression method)
+utility_datagen_fn_agg <- function(inputs, n = 500){
+  dat_indiv <- utility_datagen_fn_indiv(inputs, n = n)
+  X_hospital_mean <- rowMeans(dat_indiv)
+  data_save_dat <- data.frame(X_hospital_mean = X_hospital_mean)
   return(data_save_dat)
 }
 
-# Data generation function - Moment Matching
-utility_datagen_fn_mm <- function(inputs, n = 20, 
-                                  sd_hospital_fun = function(){return(runif(1, 0.00001, 0.4))}
-){
+# Data generation function - individual data (for other EVSI methods)
+utility_datagen_fn_indiv <- function(inputs, n = 500){
   # Load the data
-  X_hospital <- matrix(NA, nrow = dim(inputs)[1], ncol = n[1])
-  X_hospital_mean1 <- X_hospital_mean2 <- vector("numeric", dim(inputs)[1])
-  for(i in 1:dim(inputs)[1]){
-    set.seed(123 + i)
-    m_hospital <- inputs[i, "u_hospital"]
-    sd_hospital <- sd_hospital_fun()
-    
-    # Simulate the utility 
-    X_hospital[i, ] <- truncnorm::rtruncnorm(n[1], mean = m_hospital, sd = sd_hospital,
-                                             a = -Inf, b = 1)
-  }
-  
-  data_save_dat <- data.frame(cbind(X_hospital = X_hospital))
-  return(data_save_dat)
-}
-
-# Data generation function - Importance Sampling
-utility_datagen_fn_is <- function(inputs, n = 500){
-  # Load the data
-  X_hospital <- matrix(NA, nrow = dim(inputs)[1], ncol = n[1])
-  X_hospital_mean1 <- X_hospital_mean2 <- vector("numeric", dim(inputs)[1])
-  for(i in 1:dim(inputs)[1]){
+  X_hospital <- matrix(nrow = nrow(inputs), ncol = n[1])
+  X_hospital_mean1 <- X_hospital_mean2 <- numeric(nrow(inputs))
+  for(i in 1:nrow(inputs)){
     set.seed(123 + i)
     m_hospital <- inputs[i, "u_hospital"]
     sd_hospital <- inputs[i, "sd_iid_hospital"]
-    
-    # Simulate the utility 
-    X_hospital[i, ] <- truncnorm::rtruncnorm(n[1], mean = m_hospital, sd = sd_hospital,
+    X_hospital[i, ] <- truncnorm::rtruncnorm(n[1], 
+                                             mean = m_hospital, 
+                                             sd = sd_hospital,
                                              a = -Inf, b = 1)
   }
-  
   data_save_dat <- data.frame(cbind(X_hospital = X_hospital))
   return(data_save_dat)
 }
+
+m_params$sd_iid_hospital <- runif(nrow(m_params), 0.00001, 0.4)
 
 ## Regression Based Method
 evsi_utility <- evsi(outputs = chemotherapy_output,
@@ -94,29 +61,30 @@ utility_analysis_fn <- function(data, args, pars){
   # Create the data list for JAGS
   data_jags <- list(X_hospital = as.vector(data),
                     n = args$n,
-                    alpha_hospital = args$betaPar(
+                    alpha_hospital = betaPar(
                       args$u_hospital_mu,
                       args$u_hospital_sd
                     )$alpha,
-                    beta_hospital = args$betaPar(
+                    beta_hospital = betaPar(
                       args$u_hospital_mu,
                       args$u_hospital_sd
                     )$beta)
   
-  trial <- function(){
+  trial <- "
+  model { 
     for(i in 1:n){
-      X_hospital[i] ~ dnorm(u_hospital, tau_hospital);T(, 1)
+      X_hospital[i] ~ dnorm(u_hospital, tau_hospital)T(, 1)
     }
     u_hospital ~ dbeta(alpha_hospital, beta_hospital)
     sd_hospital ~ dunif(0.00001, 0.4)
     tau_hospital <- 1 / sd_hospital ^ 2
   }
+  "
   
   filein <- file.path(tempdir(),fileext="datmodel.txt")
-  R2OpenBUGS::write.model(trial,filein)
+  cat(trial, file=filein)
   
-  # Perform the MCMC simulation with OpenBUGS.
-  # Close OpenBUGS once it has finished (if debug is set to TRUE)
+  # Perform the MCMC simulation with JAGS.
   bugs.data <- jags(
     data =  data_jags,
     parameters.to.save = pars,
@@ -124,9 +92,11 @@ utility_analysis_fn <- function(data, args, pars){
     n.chains = 1, 
     n.iter = args$n.iter, 
     n.thin = 1, 
-    n.burnin = 250, progress.bar = "none") 
+    n.burnin = 250, 
+    quiet=TRUE, progress.bar = "none") 
   
-  return(data.frame(u_hospital = bugs.data$BUGSoutput$sims.matrix[, "u_hospital"]))
+  u_hospital <- bugs.data$BUGSoutput$sims.matrix[, "u_hospital"]
+  return(data.frame(u_hospital = u_hospital))
 }
 
 analysis_args <- list(n = 30,
@@ -137,9 +107,10 @@ analysis_args <- list(n = 30,
 evsi_utility <- evsi(outputs = chemotherapy_output,
                      inputs = m_params,
                      pars = c("u_hospital"),
+                     pars_datagen = c("u_hospital","sd_iid_hospital"),
                      n = seq(30, 1000, by = 200),
                      method = "mm",
-                     datagen_fn = utility_datagen_fn,
+                     datagen_fn = utility_datagen_fn_indiv,
                      model_fn = calculate_costs_effects,
                      analysis_args = analysis_args,
                      analysis_fn = utility_analysis_fn, 
@@ -150,59 +121,53 @@ evsi_utility <- evsi(outputs = chemotherapy_output,
 # Likelihood function
 utility_likelihood <- function(data, inputs){
   # Load the data
-  ll <- vector("numeric", dim(inputs)[1])
-  if(class(data) == "data.frame"){
-    data <- data[1, ]
-  }
-  
-  for(i in 1:dim(inputs)[1]){
-    set.seed(123 + i)
+  ll <- numeric(nrow(inputs)) 
+  data_vec <- unlist(data)
+
+  for(i in 1:nrow(inputs)){
     m_hospital <- inputs[i, "u_hospital"]
     sd_hospital <- inputs[i, "sd_iid_hospital"]
-    
-    # Calculate the likelihood 
     ll[i] <- exp(
       sum(
         log(
-          truncnorm::dtruncnorm(data, mean = m_hospital, sd = sd_hospital,
+          truncnorm::dtruncnorm(data_vec, 
+                                mean = m_hospital, 
+                                sd = sd_hospital,
                                 a = -Inf, b = 1)
         )))
   }
   return(ll)
 }
 
-chemotherapy_output_red <- chemotherapy_output
-chemotherapy_output_red$e <- chemotherapy_output_red$e[1:1000, ]
-chemotherapy_output_red$c <- chemotherapy_output_red$c[1:1000, ]
-
-# Add individual level standard deviation
-m_params_aug <- m_params
-m_params_aug$sd_iid_hospital <- runif(dim(m_params)[1], 0.00001, 0.4)
-
-# Importance Sampling - EVSI
-evsi_utility <- evsi(outputs = chemotherapy_output_red,
-                     inputs = m_params_aug[1:1000, ],
+# Importance Sampling - EVSI.  (this is slow).
+evsi_utility <- evsi(outputs = chemotherapy_output,
+                     inputs = m_params,
                      pars = c("u_hospital"),
                      pars_datagen = c("u_hospital", "sd_iid_hospital"),
                      n = seq(50, 1000, by = 200),
                      method = "is",
+                     nsim = 1000, 
                      datagen_fn = utility_datagen_fn_is,
                      likelihood = utility_likelihood)
 
-### Default
-# EVSI calculation using GAM regression.
-evsi_default_rb <- evsi(outputs = chemotherapy_output,
-                inputs = m_params,
-                study = "trial_binary",
-                pars = c("p_side_effects_t1", "p_side_effects_t2"),
-                n = seq(50, 500, by = 50),
-                method = "gam")
 
-# EVSI calculation using Importance Sampling
-evsi_default_is <- evsi(outputs = chemotherapy_output,
+### Using the "trial_binary" built-in study design
+
+# EVSI calculation using GAM regression.
+evsi_builtin_rb <- evsi(outputs = chemotherapy_output,
                         inputs = m_params,
                         study = "trial_binary",
-                        pars = c("p_side_effects_t1", "p_side_effects_t2"),
+                        pars = c("p_side_effects_t1", 
+                                 "p_side_effects_t2"),
+                        n = seq(50, 500, by = 50),
+                        method = "gam")
+
+# EVSI calculation using Importance Sampling
+evsi_builtin_is <- evsi(outputs = chemotherapy_output,
+                        inputs = m_params,
+                        study = "trial_binary",
+                        pars = c("p_side_effects_t1", 
+                                 "p_side_effects_t2"),
                         n = seq(50, 500, by = 50),
                         method = "is")
 
@@ -210,12 +175,13 @@ evsi_default_is <- evsi(outputs = chemotherapy_output,
 # Beta prior for standard care is set using the number of events
 beta_params_t1 <- c(1 + n_side_effects,
                     1 + n_patients - n_side_effects)
-# Beta prior for the novel intervention is approximated from the mean and 
-# standard deviation of the PA distribution for the probability of side effects.
+# Beta prior for the novel intervention is approximated from the 
+# mean andstandard deviation of the PA distribution for the 
+# probability of side effects.
 beta_params_t2 <- betaPar(mean(m_params$p_side_effects_t2),
                           sd(m_params$p_side_effects_t2))
 # EVSI calculation with moment matching method
-evsi_default_mm <- evsi(outputs = chemotherapy_output,
+evsi_builtin_mm <- evsi(outputs = chemotherapy_output,
                      inputs = m_params,
                      study = "trial_binary",
                      pars = c("p_side_effects_t1", "p_side_effects_t2"),
@@ -247,7 +213,8 @@ OR_datagen_fn <- function(inputs, n = 500){
 evsi_OR <- evsi(outputs = chemotherapy_output,
                 inputs = m_params,
                 pars = c("logor_side_effects"),
-                pars_datagen = c("p_side_effects_t1", "p_side_effects_t2"),
+                pars_datagen = c("p_side_effects_t1", 
+                                 "p_side_effects_t2"),
                 n = seq(50, 500, by = 10),
                 method = "gam",
                 datagen_fn = OR_datagen_fn,
@@ -278,30 +245,32 @@ OR_analysis_fn <- function(data, args, pars){
                     logor_side_effects_mu = args$logor_side_effects_mu,
                     logor_side_effects_sd = args$logor_side_effects_sd)
   
-  LogOR_trial <- function(){
+  LogOR_trial <- "
+  model { 
     # Probability of side effects under treatment 1
     p_side_effects_t1 ~ dbeta(1 + n_side_effects, 
                               1 + n_patients - n_side_effects)
     
     # Log odds of side effects on treatment 2
-    logor_side_effects ~ dnorm(logor_side_effects_mu, logor_side_effects_sd)
+    logor_side_effects ~ dnorm(logor_side_effects_mu, 
+                               logor_side_effects_sd)
     # Odds of side effects on treatment 1
     odds_side_effects_t1 <- p_side_effects_t1 / (1 - p_side_effects_t1)
     # Odds for side effects on treatment 2
     odds_side_effects_t2 <- odds_side_effects_t1 * exp(logor_side_effects)
     
     # Probability of side effects under treatment 2
-    p_side_effects_t2    <- odds_side_effects_t2 / (1 + odds_side_effects_t2)
+    p_side_effects_t2 <- 
+      odds_side_effects_t2 / (1 + odds_side_effects_t2)
     
     X1 ~ dbin(p_side_effects_t1, n)
     X2 ~ dbin(p_side_effects_t2, n)
   }
+  "
+  filein <- file.path(tempdir(), fileext="datmodel.txt")
+  cat(LogOR_trial,file=filein)
   
-  filein <- file.path(tempdir(),fileext="datmodel.txt")
-  R2OpenBUGS::write.model(LogOR_trial,filein)
-  
-  # Perform the MCMC simulation with OpenBUGS.
-  # Close OpenBUGS once it has finished (if debug is set to TRUE)
+  # Perform the MCMC simulation with JAGS
   bugs.data <- jags(
     data =  data_jags,
     parameters.to.save = pars,
@@ -309,18 +278,26 @@ OR_analysis_fn <- function(data, args, pars){
     n.chains = 3, 
     n.iter = args$n.iter, 
     n.thin = 1, 
-    n.burnin = 250, progress.bar = "none") 
+    n.burnin = 250, 
+    quiet=TRUE, progress.bar = "none") 
   
-  # Resample treatment 1 from the prior as study will not updated t1
-  resample_t1 <- rbeta(length(bugs.data$BUGSoutput$sims.matrix[, pars[2]]),
+  # Resample treatment 1 from the prior as study will not update t1
+  nsam <- length(bugs.data$BUGSoutput$sims.matrix[, pars[2]])
+  resample_t1 <- rbeta(nsam,
                        1 + args$n_side_effects,
                        1 + args$n_patients - args$n_side_effects)
-  
+  resample_t2 <- bugs.data$BUGSoutput$sims.matrix[, pars[2]]
   return(data.frame(p_side_effects_t1 = resample_t1,
-                    p_side_effects_t2 = bugs.data$BUGSoutput$sims.matrix[, pars[2]]))
+                    p_side_effects_t2 = resample_t2))
 }
 
-# EVSI calculation using the momemt matching method.
+# EVSI calculation using the moment matching method.
+analysis_args <- list(n_side_effects = n_side_effects,
+                      n_patients = n_patients,
+                      n = 500,
+                      logor_side_effects_mu = logor_side_effects_mu,
+                      logor_side_effects_sd = logor_side_effects_sd,
+                      n.iter = 7500)
 evsi_OR <- evsi(outputs = chemotherapy_output,
                 inputs = m_params,
                 pars = c("p_side_effects_t1", "p_side_effects_t2"),
@@ -328,11 +305,6 @@ evsi_OR <- evsi(outputs = chemotherapy_output,
                 method = "mm",
                 datagen_fn = OR_datagen_fn,
                 model_fn = calculate_costs_effects,
-                analysis_args = list(n_side_effects = n_side_effects,
-                                     n_patients = n_patients,
-                                     n = 500,
-                                     logor_side_effects_mu = logor_side_effects_mu,
-                                     logor_side_effects_sd = logor_side_effects_sd,
-                                     n.iter = 7500),
+                analysis_args = analysis_args, 
                 analysis_fn = OR_analysis_fn, 
                 par_fn = generate_psa_parameters)
