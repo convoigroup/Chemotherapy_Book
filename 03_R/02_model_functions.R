@@ -178,9 +178,9 @@ calculate_costs_effects <- function(
   
   names(c_overall) <- paste0("cost",seq_along(c_overall))
   names(u_overall) <- paste0("eff",seq_along(u_overall))
-  output <- array(NA, dim = c(length(u_overall), 2),
-                  dimnames = list(c("SoC", "Novel"),
-                                  c("Effects", "Costs")))
+  output <- array(NA, dim = c(2, length(u_overall)),
+                  dimnames = list(c("Effects", "Costs"),
+                                  c("SoC", "Novel")))
   output[1, ] <- u_overall
   output[2, ] <- c_overall
   
