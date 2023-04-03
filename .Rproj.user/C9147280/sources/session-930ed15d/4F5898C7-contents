@@ -197,57 +197,7 @@ full_datagen_fn <- function(inputs, n = 500){
   rate_recover_hosp <- -log(1 -lambda_hosp )
   rate_recover_home <- -log(1 - lambda_home)
   
-  X1 <- X2 <- X_hosp <- X_dead <- N_recover_home <-  N_recover_hospital <- vector("numeric", length = dim(inputs)[1])
-  T_home <- T_hosp <- matrix(NA, nrow = dim(inputs)[1], ncol = 2 * n)
-  for(i in 1:dim(inputs)[1]){
-    # Simulate the number of patients with side effects
-    X1[i] <- rbinom(1, n, p_side_effects_t1[i])
-    X2[i] <- rbinom(1, n, p_side_effects_t2[i])
-    
-    # Simulate the number of patients hospitalised 
-    X_hosp[i] <- rbinom(1, X1[i] + X2[i], p_hospitalised_total[i])
-    # Simulate the number of patients die
-    X_dead[i] <- rbinom(1, X_hosp[i], p_died[i])
-    
-    ## Simulate recovery times for patients
-    N_recover_home[i] <- X1[i] + X2[i] - X_hosp[i]
-    if(N_recover_home[i] > 0){
-      T_home[i, 1:N_recover_home[i]] <- rexp(N_recover_home[i], rate_recover_home[i])
-    }
-    N_recover_hospital[i] <- X_hosp[i] - X_dead[i]
-    if(N_recover_hospital[i] > 0){
-      T_hosp[i, 1:N_recover_hospital[i]] <- rexp(N_recover_hospital[i], rate_recover_hosp[i])
-    }
-    
-  }
-  
-  data_save_dat <- data.frame(cbind(X1 = X1, X2 = X2, 
-                                    X_hosp = X_hosp, X_dead = X_dead,
-                                    N_recover_home = N_recover_home,
-                                    N_recover_hospital = N_recover_hospital,
-                                    T_home = T_home, T_hosp = T_hosp))
-  return(data_save_dat)
-}
-
-## Regression Based
-full_datagen_fn_RB <- function(inputs, n = 500){
-  # Load the data
-  p_side_effects_t1 <- inputs[, "p_side_effects_t1"]
-  logor_side_effects <- inputs[, "logor_side_effects"]
-  # Odds for side effects for treatment 1
-  odds_side_effects_t1 <- p_side_effects_t1 / (1 - p_side_effects_t1)
-  # Odds for side effects on treatment 2
-  odds_side_effects_t2 <- odds_side_effects_t1 * exp(logor_side_effects)
-  # Probability of side effects under treatment 2
-  p_side_effects_t2 <- odds_side_effects_t2 / (1 + odds_side_effects_t2)
-  p_hospitalised_total <- inputs[, "p_hospitalised_total"]
-  p_died <- inputs[, "p_died"]
-  lambda_home <- inputs[, "lambda_home"]
-  lambda_hosp <- inputs[, "lambda_hosp"]
-  rate_recover_hosp <- -log(1 -lambda_hosp )
-  rate_recover_home <- -log(1 - lambda_home)
-  
-  X1 <- X2 <- X_hosp <- X_dead <- N_recover_home <- 
+  X1 <- X2 <- X_hosp <- X_dead <- N_recover_home <-  
     N_recover_hospital <- vector("numeric", length = dim(inputs)[1])
   T_home <- T_hosp <- matrix(NA, nrow = dim(inputs)[1], ncol = 2 * n)
   for(i in 1:dim(inputs)[1]){
@@ -263,17 +213,35 @@ full_datagen_fn_RB <- function(inputs, n = 500){
     ## Simulate recovery times for patients
     N_recover_home[i] <- X1[i] + X2[i] - X_hosp[i]
     if(N_recover_home[i] > 0){
-      T_home[i, 1:N_recover_home[i]] <- rexp(N_recover_home[i], rate_recover_home[i])
+      T_home[i, 1:N_recover_home[i]] <- rexp(N_recover_home[i], 
+                                             rate_recover_home[i])
     }
     N_recover_hospital[i] <- X_hosp[i] - X_dead[i]
     if(N_recover_hospital[i] > 0){
-      T_hosp[i, 1:N_recover_hospital[i]] <- rexp(N_recover_hospital[i], rate_recover_hosp[i])
+      T_hosp[i, 1:N_recover_hospital[i]] <- rexp(N_recover_hospital[i], 
+                                                 rate_recover_hosp[i])
     }
+    
   }
   
-  OR <- (n - X2) / X2 / ((n - X1) / X1)
-  p_hosp <- X_hosp / (X1 + X2)
-  p_dead <- X_dead / X_hosp
+  data_save_dat <- data.frame(cbind(X1 = X1, X2 = X2, 
+                                    X_hosp = X_hosp, X_dead = X_dead,
+                                    N_recover_home = N_recover_home,
+                                    N_recover_hospital = N_recover_hospital,
+                                    T_home = T_home, T_hosp = T_hosp))
+  return(data_save_dat)
+}
+
+## Regression Based
+full_datagen_fn_RB <- function(inputs, n = 500){
+  # Generate the data
+  data_sim <- full_datagen_fn(inputs, n)
+  T_home <- data_sim[, (1:(2 * n)) + 6]
+  T_hosp <- data_sim[, (6 + 2 * n) + (1:n)]
+  OR <- (n - data_sim$X2) / data_sim$X2 / 
+    ((n - data_sim$X1) / data_sim$X1)
+  p_hosp <- data_sim$X_hosp / (data_sim$X1 + data_sim$X2)
+  p_dead <- data_sim$X_dead / data_sim$X_hosp
   T_home_sum <- rowSums(T_home, na.rm = TRUE)
   T_hosp_sum <- rowSums(T_hosp, na.rm = TRUE)
   
@@ -330,7 +298,8 @@ full_analysis_fn <- function(data, args, pars){
   T_hosp <- NA
   if(data$N_recover_hospital > 0){
     T_hosp <- as.vector(as.matrix(data[, 
-                                       (6 + 2 * args$n) + (1:data$N_recover_hospital)]))
+                                       (6 + 2 * args$n) + 
+                                         (1:data$N_recover_hospital)]))
   } 
   
   # Create the data list for JAGS
@@ -351,18 +320,23 @@ full_analysis_fn <- function(data, args, pars){
                     n_patients = args$n_patients,
                     logor_side_effects_mu = args$logor_side_effects_mu,
                     logor_side_effects_sd = args$logor_side_effects_sd,
-                    p_recovery_home_alpha = betaPar(args$p_recovery_home_mu, 
-                                                    args$p_recovery_home_sd)$alpha,
-                    p_recovery_home_beta = betaPar(args$p_recovery_home_mu, 
-                                                   args$p_recovery_home_sd)$beta,
-                    p_recovery_hosp_alpha = betaPar(args$p_recovery_hosp_mu, 
-                                                    args$p_recovery_hosp_sd)$alpha,
-                    p_recovery_hosp_beta = betaPar(args$p_recovery_hosp_mu,
-                                                   args$p_recovery_hosp_sd)$beta,
+                    p_recovery_home_alpha = 
+                      betaPar(args$p_recovery_home_mu, 
+                              args$p_recovery_home_sd)$alpha,
+                    p_recovery_home_beta = 
+                      betaPar(args$p_recovery_home_mu, 
+                              args$p_recovery_home_sd)$beta,
+                    p_recovery_hosp_alpha = 
+                      betaPar(args$p_recovery_hosp_mu, 
+                              args$p_recovery_hosp_sd)$alpha,
+                    p_recovery_hosp_beta = 
+                      betaPar(args$p_recovery_hosp_mu,
+                              args$p_recovery_hosp_sd)$beta,
                     n_died = args$n_died,
                     n_hospitalised = args$n_hospitalised)
   
-  LogOR_addoutcomes_trial <- function(){
+  LogOR_addoutcomes_trial <- 
+    "model{
     
     ## Models for the data
     X1 ~ dbin(p_side_effects_t1, n)
@@ -410,12 +384,12 @@ full_analysis_fn <- function(data, args, pars){
     # that they do not die
     lambda_hosp ~ dbeta(p_recovery_hosp_alpha, p_recovery_hosp_beta)
   }
+  "
   
   filein <- file.path(tempdir(),fileext="datmodel.txt")
-  R2OpenBUGS::write.model(LogOR_addoutcomes_trial,filein)
+  cat(LogOR_addoutcomes_trial, file=filein)
   
-  # Perform the MCMC simulation with OpenBUGS.
-  # Close OpenBUGS once it has finished (if debug is set to TRUE)
+  # Perform the MCMC simulation with JAGS.
   bugs.data <- jags(
     data =  data_jags,
     parameters.to.save = pars,
@@ -425,14 +399,34 @@ full_analysis_fn <- function(data, args, pars){
     n.thin = 1, 
     n.burnin = 250, progress.bar = "none") 
   
-  return(data.frame(logor_side_effects = bugs.data$BUGSoutput$sims.matrix[, "logor_side_effects"],
-                    p_hospitalised_total= bugs.data$BUGSoutput$sims.matrix[, "p_hospitalised_total"],
-                    p_died = bugs.data$BUGSoutput$sims.matrix[, "p_died"],
-                    lambda_home = bugs.data$BUGSoutput$sims.matrix[, "lambda_home"],
-                    lambda_hosp = bugs.data$BUGSoutput$sims.matrix[, "lambda_hosp"]))
+  logor_side_effects <- bugs.data$BUGSoutput$sims.matrix[, "logor_side_effects"]
+  p_hosp_total <- bugs.data$BUGSoutput$sims.matrix[, "p_hospitalised_total"]
+  p_died <- bugs.data$BUGSoutput$sims.matrix[, "p_died"]
+  lambda_home <- bugs.data$BUGSoutput$sims.matrix[, "lambda_home"]
+  lambda_hosp <- bugs.data$BUGSoutput$sims.matrix[, "lambda_hosp"]
+  
+  return(data.frame(logor_side_effects = logor_side_effects,
+                    p_hospitalised_total= p_hosp_total,
+                    p_died = p_died,
+                    lambda_home = lambda_home,
+                    lambda_hosp = lambda_hosp))
 }
 
 # EVSI calculation using the momemt matching method.
+analysis_args <- list(n_side_effects = n_side_effects,
+                      n_patients = n_patients,
+                      n = 50,
+                      logor_side_effects_mu = logor_side_effects_mu,
+                      logor_side_effects_sd = logor_side_effects_sd,
+                      betaPar = betaPar,
+                      p_recovery_home_mu = p_recovery_home_mu,
+                      p_recovery_home_sd = p_recovery_home_sd,
+                      p_recovery_hosp_mu = p_recovery_hosp_mu,
+                      p_recovery_hosp_sd = p_recovery_hosp_sd,
+                      n.iter = 5250,
+                      n_died = n_died,
+                      n_hospitalised = n_hospitalised,
+                      p_side_effects_t1 = m_params$p_side_effects_t1)
 evsi_OR_allout_MM <- evsi(outputs = chemotherapy_output,
                           inputs = m_params,
                           pars = c("logor_side_effects",
@@ -446,20 +440,7 @@ evsi_OR_allout_MM <- evsi(outputs = chemotherapy_output,
                           method = "mm",
                           datagen_fn = full_datagen_fn,
                           model_fn = calculate_costs_effects,
-                          analysis_args = list(n_side_effects = n_side_effects,
-                                               n_patients = n_patients,
-                                               n = 50,
-                                               logor_side_effects_mu = logor_side_effects_mu,
-                                               logor_side_effects_sd = logor_side_effects_sd,
-                                               betaPar = betaPar,
-                                               p_recovery_home_mu = p_recovery_home_mu,
-                                               p_recovery_home_sd = p_recovery_home_sd,
-                                               p_recovery_hosp_mu = p_recovery_hosp_mu,
-                                               p_recovery_hosp_sd = p_recovery_hosp_sd,
-                                               n.iter = 5250,
-                                               n_died = n_died,
-                                               n_hospitalised = n_hospitalised,
-                                               p_side_effects_t1 = m_params$p_side_effects_t1),
+                          analysis_args = ,
                           analysis_fn = full_analysis_fn, 
                           par_fn = generate_psa_parameters,
                           npreg_method = "earth")

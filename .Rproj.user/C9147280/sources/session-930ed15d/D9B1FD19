@@ -1,26 +1,26 @@
 {
-    "id": "B146DAFD",
+    "id": "D9B1FD19",
     "path": "~/GitHub/Chemotherapy_Book/04_analysis/05_Expected_Value_of_Sample_Information_Bespoke_Example.R",
     "project_path": "04_analysis/05_Expected_Value_of_Sample_Information_Bespoke_Example.R",
     "type": "r_source",
     "hash": "0",
     "contents": "",
-    "dirty": true,
-    "created": 1679922723106.0,
+    "dirty": false,
+    "created": 1680555041962.0,
     "source_on_save": false,
-    "relative_order": 2,
+    "relative_order": 3,
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "310,0",
-        "scrollLine": "281"
+        "cursorPosition": "132,0",
+        "scrollLine": "105"
     },
     "folds": "",
-    "lastKnownWriteTime": 1680285962,
+    "lastKnownWriteTime": 1680552670,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1680290800465,
+    "last_content_update": 1680552670,
     "read_only": false,
     "read_only_alternatives": []
 }
