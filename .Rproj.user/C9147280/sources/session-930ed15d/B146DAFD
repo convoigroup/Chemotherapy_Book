@@ -3,24 +3,24 @@
     "path": "~/GitHub/Chemotherapy_Book/04_analysis/05_Expected_Value_of_Sample_Information_Bespoke_Example.R",
     "project_path": "04_analysis/05_Expected_Value_of_Sample_Information_Bespoke_Example.R",
     "type": "r_source",
-    "hash": "3109915043",
+    "hash": "0",
     "contents": "",
-    "dirty": false,
+    "dirty": true,
     "created": 1679922723106.0,
     "source_on_save": false,
     "relative_order": 2,
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "179,69",
-        "scrollLine": "165"
+        "cursorPosition": "310,0",
+        "scrollLine": "281"
     },
-    "folds": "23|2|40|0|\n45|2|61|0|\n92|50|129|0|\n268|45|320|0|\n",
-    "lastKnownWriteTime": 1679951001,
+    "folds": "",
+    "lastKnownWriteTime": 1680285962,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1679951001551,
+    "last_content_update": 1680290800465,
     "read_only": false,
     "read_only_alternatives": []
 }
