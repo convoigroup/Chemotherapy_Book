@@ -76,7 +76,6 @@ utility_datagen_fn_agg <- function(inputs, n = 500){
 utility_datagen_fn_indiv <- function(inputs, n = 500){
   # Load the data
   X_hospital <- matrix(nrow = nrow(inputs), ncol = n[1])
-  X_hospital_mean1 <- X_hospital_mean2 <- numeric(nrow(inputs))
   for(i in 1:nrow(inputs)){
     set.seed(123 + i)
     m_hospital <- inputs[i, "u_hospital"]
