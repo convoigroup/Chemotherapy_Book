@@ -1,0 +1,27 @@
+{
+    "id": "504D28E4",
+    "path": "~/GitHub/Chemotherapy_Book/06_figs/01_plotting_functions.R",
+    "project_path": "06_figs/01_plotting_functions.R",
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1680555666546.0,
+    "source_on_save": false,
+    "relative_order": 4,
+    "properties": {
+        "tempName": "Untitled2",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "447,79",
+        "scrollLine": "442"
+    },
+    "folds": "21|1|95|0|\n100|1|156|0|\n177|1|280|0|\n285|1|334|0|\n",
+    "lastKnownWriteTime": 1681135755,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1681135755780,
+    "read_only": false,
+    "read_only_alternatives": []
+}

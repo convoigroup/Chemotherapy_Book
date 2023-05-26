@@ -171,11 +171,11 @@ dev.off()
 
 pop.adjust <- 46000 * (1 / (1 + 0.035)^3)
 pdf("06_figs/ENBS_SE.pdf")
-evsi.enbs.plot(plotting, c(1260000, 1400000), 2 * c(1560.55, 1600), 
+evsi.enbs.plot(plotting_2, c(1260000, 1400000), 2 * c(1560.55, 1600), 
                k = 20000, Pop = pop.adjust, Time = 7)
 dev.off()
 
-optim.ss(plotting, c(1260000, 1400000), 2 * c(1560.55, 1600), 
+optim.ss(plotting_2, c(1260000, 1400000), 2 * c(1560.55, 1600), 
          k = 20000, Pop = pop.adjust, Time = 7)
 
 ## Full Study
@@ -197,57 +197,7 @@ full_datagen_fn <- function(inputs, n = 500){
   rate_recover_hosp <- -log(1 -lambda_hosp )
   rate_recover_home <- -log(1 - lambda_home)
   
-  X1 <- X2 <- X_hosp <- X_dead <- N_recover_home <-  N_recover_hospital <- vector("numeric", length = dim(inputs)[1])
-  T_home <- T_hosp <- matrix(NA, nrow = dim(inputs)[1], ncol = 2 * n)
-  for(i in 1:dim(inputs)[1]){
-    # Simulate the number of patients with side effects
-    X1[i] <- rbinom(1, n, p_side_effects_t1[i])
-    X2[i] <- rbinom(1, n, p_side_effects_t2[i])
-    
-    # Simulate the number of patients hospitalised 
-    X_hosp[i] <- rbinom(1, X1[i] + X2[i], p_hospitalised_total[i])
-    # Simulate the number of patients die
-    X_dead[i] <- rbinom(1, X_hosp[i], p_died[i])
-    
-    ## Simulate recovery times for patients
-    N_recover_home[i] <- X1[i] + X2[i] - X_hosp[i]
-    if(N_recover_home[i] > 0){
-      T_home[i, 1:N_recover_home[i]] <- rexp(N_recover_home[i], rate_recover_home[i])
-    }
-    N_recover_hospital[i] <- X_hosp[i] - X_dead[i]
-    if(N_recover_hospital[i] > 0){
-      T_hosp[i, 1:N_recover_hospital[i]] <- rexp(N_recover_hospital[i], rate_recover_hosp[i])
-    }
-    
-  }
-  
-  data_save_dat <- data.frame(cbind(X1 = X1, X2 = X2, 
-                                    X_hosp = X_hosp, X_dead = X_dead,
-                                    N_recover_home = N_recover_home,
-                                    N_recover_hospital = N_recover_hospital,
-                                    T_home = T_home, T_hosp = T_hosp))
-  return(data_save_dat)
-}
-
-## Regression Based
-full_datagen_fn_RB <- function(inputs, n = 500){
-  # Load the data
-  p_side_effects_t1 <- inputs[, "p_side_effects_t1"]
-  logor_side_effects <- inputs[, "logor_side_effects"]
-  # Odds for side effects for treatment 1
-  odds_side_effects_t1 <- p_side_effects_t1 / (1 - p_side_effects_t1)
-  # Odds for side effects on treatment 2
-  odds_side_effects_t2 <- odds_side_effects_t1 * exp(logor_side_effects)
-  # Probability of side effects under treatment 2
-  p_side_effects_t2 <- odds_side_effects_t2 / (1 + odds_side_effects_t2)
-  p_hospitalised_total <- inputs[, "p_hospitalised_total"]
-  p_died <- inputs[, "p_died"]
-  lambda_home <- inputs[, "lambda_home"]
-  lambda_hosp <- inputs[, "lambda_hosp"]
-  rate_recover_hosp <- -log(1 -lambda_hosp )
-  rate_recover_home <- -log(1 - lambda_home)
-  
-  X1 <- X2 <- X_hosp <- X_dead <- N_recover_home <- 
+  X1 <- X2 <- X_hosp <- X_dead <- N_recover_home <-  
     N_recover_hospital <- vector("numeric", length = dim(inputs)[1])
   T_home <- T_hosp <- matrix(NA, nrow = dim(inputs)[1], ncol = 2 * n)
   for(i in 1:dim(inputs)[1]){
@@ -263,17 +213,35 @@ full_datagen_fn_RB <- function(inputs, n = 500){
     ## Simulate recovery times for patients
     N_recover_home[i] <- X1[i] + X2[i] - X_hosp[i]
     if(N_recover_home[i] > 0){
-      T_home[i, 1:N_recover_home[i]] <- rexp(N_recover_home[i], rate_recover_home[i])
+      T_home[i, 1:N_recover_home[i]] <- rexp(N_recover_home[i], 
+                                             rate_recover_home[i])
     }
     N_recover_hospital[i] <- X_hosp[i] - X_dead[i]
     if(N_recover_hospital[i] > 0){
-      T_hosp[i, 1:N_recover_hospital[i]] <- rexp(N_recover_hospital[i], rate_recover_hosp[i])
+      T_hosp[i, 1:N_recover_hospital[i]] <- rexp(N_recover_hospital[i], 
+                                                 rate_recover_hosp[i])
     }
+    
   }
   
-  OR <- (n - X2) / X2 / ((n - X1) / X1)
-  p_hosp <- X_hosp / (X1 + X2)
-  p_dead <- X_dead / X_hosp
+  data_save_dat <- data.frame(cbind(X1 = X1, X2 = X2, 
+                                    X_hosp = X_hosp, X_dead = X_dead,
+                                    N_recover_home = N_recover_home,
+                                    N_recover_hospital = N_recover_hospital,
+                                    T_home = T_home, T_hosp = T_hosp))
+  return(data_save_dat)
+}
+
+## Regression Based
+full_datagen_fn_RB <- function(inputs, n = 500){
+  # Generate the data
+  data_sim <- full_datagen_fn(inputs, n)
+  T_home <- data_sim[, (1:(2 * n)) + 6]
+  T_hosp <- data_sim[, (6 + 2 * n) + (1:n)]
+  OR <- (n - data_sim$X2) / data_sim$X2 / 
+    ((n - data_sim$X1) / data_sim$X1)
+  p_hosp <- data_sim$X_hosp / (data_sim$X1 + data_sim$X2)
+  p_dead <- data_sim$X_dead / data_sim$X_hosp
   T_home_sum <- rowSums(T_home, na.rm = TRUE)
   T_hosp_sum <- rowSums(T_hosp, na.rm = TRUE)
   
@@ -330,7 +298,8 @@ full_analysis_fn <- function(data, args, pars){
   T_hosp <- NA
   if(data$N_recover_hospital > 0){
     T_hosp <- as.vector(as.matrix(data[, 
-                                       (6 + 2 * args$n) + (1:data$N_recover_hospital)]))
+                                       (6 + 2 * args$n) + 
+                                         (1:data$N_recover_hospital)]))
   } 
   
   # Create the data list for JAGS
@@ -351,18 +320,23 @@ full_analysis_fn <- function(data, args, pars){
                     n_patients = args$n_patients,
                     logor_side_effects_mu = args$logor_side_effects_mu,
                     logor_side_effects_sd = args$logor_side_effects_sd,
-                    p_recovery_home_alpha = betaPar(args$p_recovery_home_mu, 
-                                                    args$p_recovery_home_sd)$alpha,
-                    p_recovery_home_beta = betaPar(args$p_recovery_home_mu, 
-                                                   args$p_recovery_home_sd)$beta,
-                    p_recovery_hosp_alpha = betaPar(args$p_recovery_hosp_mu, 
-                                                    args$p_recovery_hosp_sd)$alpha,
-                    p_recovery_hosp_beta = betaPar(args$p_recovery_hosp_mu,
-                                                   args$p_recovery_hosp_sd)$beta,
+                    p_recovery_home_alpha = 
+                      betaPar(args$p_recovery_home_mu, 
+                              args$p_recovery_home_sd)$alpha,
+                    p_recovery_home_beta = 
+                      betaPar(args$p_recovery_home_mu, 
+                              args$p_recovery_home_sd)$beta,
+                    p_recovery_hosp_alpha = 
+                      betaPar(args$p_recovery_hosp_mu, 
+                              args$p_recovery_hosp_sd)$alpha,
+                    p_recovery_hosp_beta = 
+                      betaPar(args$p_recovery_hosp_mu,
+                              args$p_recovery_hosp_sd)$beta,
                     n_died = args$n_died,
                     n_hospitalised = args$n_hospitalised)
   
-  LogOR_addoutcomes_trial <- function(){
+  LogOR_addoutcomes_trial <- 
+    "model{
     
     ## Models for the data
     X1 ~ dbin(p_side_effects_t1, n)
@@ -410,12 +384,12 @@ full_analysis_fn <- function(data, args, pars){
     # that they do not die
     lambda_hosp ~ dbeta(p_recovery_hosp_alpha, p_recovery_hosp_beta)
   }
+  "
   
   filein <- file.path(tempdir(),fileext="datmodel.txt")
-  R2OpenBUGS::write.model(LogOR_addoutcomes_trial,filein)
+  cat(LogOR_addoutcomes_trial, file=filein)
   
-  # Perform the MCMC simulation with OpenBUGS.
-  # Close OpenBUGS once it has finished (if debug is set to TRUE)
+  # Perform the MCMC simulation with JAGS.
   bugs.data <- jags(
     data =  data_jags,
     parameters.to.save = pars,
@@ -425,14 +399,36 @@ full_analysis_fn <- function(data, args, pars){
     n.thin = 1, 
     n.burnin = 250, progress.bar = "none") 
   
-  return(data.frame(logor_side_effects = bugs.data$BUGSoutput$sims.matrix[, "logor_side_effects"],
-                    p_hospitalised_total= bugs.data$BUGSoutput$sims.matrix[, "p_hospitalised_total"],
-                    p_died = bugs.data$BUGSoutput$sims.matrix[, "p_died"],
-                    lambda_home = bugs.data$BUGSoutput$sims.matrix[, "lambda_home"],
-                    lambda_hosp = bugs.data$BUGSoutput$sims.matrix[, "lambda_hosp"]))
+  logor_side_effects <- bugs.data$BUGSoutput$sims.matrix[, "logor_side_effects"]
+  p_hosp_total <- bugs.data$BUGSoutput$sims.matrix[, "p_hospitalised_total"]
+  p_died <- bugs.data$BUGSoutput$sims.matrix[, "p_died"]
+  lambda_home <- bugs.data$BUGSoutput$sims.matrix[, "lambda_home"]
+  lambda_hosp <- bugs.data$BUGSoutput$sims.matrix[, "lambda_hosp"]
+  
+  return(data.frame(logor_side_effects = logor_side_effects,
+                    p_hospitalised_total= p_hosp_total,
+                    p_died = p_died,
+                    lambda_home = lambda_home,
+                    lambda_hosp = lambda_hosp))
 }
 
 # EVSI calculation using the momemt matching method.
+analysis_args <- list(n_side_effects = n_side_effects,
+                      n_patients = n_patients,
+                      n = 50,
+                      logor_side_effects_mu = logor_side_effects_mu,
+                      logor_side_effects_sd = logor_side_effects_sd,
+                      betaPar = betaPar,
+                      p_recovery_home_mu = p_recovery_home_mu,
+                      p_recovery_home_sd = p_recovery_home_sd,
+                      p_recovery_hosp_mu = p_recovery_hosp_mu,
+                      p_recovery_hosp_sd = p_recovery_hosp_sd,
+                      n.iter = 5250,
+                      n_died = n_died,
+                      n_hospitalised = n_hospitalised,
+                      p_side_effects_t1 = m_params$p_side_effects_t1)
+
+
 evsi_OR_allout_MM <- evsi(outputs = chemotherapy_output,
                           inputs = m_params,
                           pars = c("logor_side_effects",
@@ -446,20 +442,7 @@ evsi_OR_allout_MM <- evsi(outputs = chemotherapy_output,
                           method = "mm",
                           datagen_fn = full_datagen_fn,
                           model_fn = calculate_costs_effects,
-                          analysis_args = list(n_side_effects = n_side_effects,
-                                               n_patients = n_patients,
-                                               n = 50,
-                                               logor_side_effects_mu = logor_side_effects_mu,
-                                               logor_side_effects_sd = logor_side_effects_sd,
-                                               betaPar = betaPar,
-                                               p_recovery_home_mu = p_recovery_home_mu,
-                                               p_recovery_home_sd = p_recovery_home_sd,
-                                               p_recovery_hosp_mu = p_recovery_hosp_mu,
-                                               p_recovery_hosp_sd = p_recovery_hosp_sd,
-                                               n.iter = 5250,
-                                               n_died = n_died,
-                                               n_hospitalised = n_hospitalised,
-                                               p_side_effects_t1 = m_params$p_side_effects_t1),
+                          analysis_args = analysis_args,
                           analysis_fn = full_analysis_fn, 
                           par_fn = generate_psa_parameters,
                           npreg_method = "earth")
@@ -472,8 +455,32 @@ plotting_4 <- evsi.plot.adapt(chemotherapy_output, m_params, c("logor_side_effec
 pop.adjust <- 46000 * (1 / (1 + 0.035)^3)
 
 pdf("06_figs/ENBS_SEFU_MM.pdf")
+ENBS_RB <- vector()
+i <- 1
+for(n in plotting_4$attrib$N){
+  ENBS_RB[i] <- ENBS.fun(plotting_3$evsi$`20000`[i], pop.adjust, 7, 0.035, 
+                         mean(c(1260000, 1400000)) + mean(2 * c(1560.55, 1600) * n))
+  i <- i + 1
+}
+ENBS_MM <- vector()
+i <- 1
+for(n in plotting_4$attrib$N){
+  ENBS_MM[i] <- ENBS.fun(plotting_4$evsi$`20000`[i], pop.adjust, 7, 0.035, 
+                         mean(c(1260000, 1400000)) + mean(2 * c(1560.55, 1600) * n))
+  i <- i + 1
+}
+
 evsi.enbs.plot(plotting_4, c(1260000, 1400000), 2 * c(1560.55, 1600), 
-               k = 20000, Pop = pop.adjust, Time = 7)
+               k = 20000, Pop = pop.adjust, Time = 7, 
+               ylim = c(min(ENBS_MM), max(ENBS_RB)),
+               legend = F)
+
+points(plotting_3$attrib$N, ENBS_RB, type = "l",
+       lty = 3)
+legend(y =4.6e07, x = 950, c("Moment Matching", "Regression Based"), lty = c(1,3), 
+       lwd = c(2,1), box.lwd = 0, 
+       box.col = "white", bg = "white")
+
 dev.off()
 
 optim.ss(plotting_4, c(1260000, 1400000), 2 * c(1560.55, 1600), 
@@ -491,46 +498,61 @@ dev.off()
 
 
 ### Utilities ###
-# Data generation function
-utility_datagen_fn <- function(inputs, n = 20, 
-                               sd_recovery_fun = function(){return(runif(1, 0.000001, 0.15))},
-                               sd_home_care_fun = function(){return(runif(1, 0.00001, 0.6))},
-                               sd_hospital_fun = function(){return(runif(1, 0.00001, 0.4))}
-){
+# Data generation function - aggregate data (for regression method)
+utility_datagen_fn_agg <- function(inputs, n = 500){
+  dat_indiv <- utility_datagen_fn_indiv(inputs, n = n)
+  recovery_idx <- (1:args$n)
+  home_care_idx <- args$n + (1:args$n)
+  hospital_idx <- 2*args$n + (1:args$n)
+  X_recovery_mean <- rowMeans(dat_indiv[, recovery_idx])
+  X_home_care_mean <- rowMeans(dat_indiv[, home_care_idx])
+  X_hospital_mean <- rowMeans(dat_indiv[, hospital_idx])
+  data_save_dat <- data.frame(X_recovery_mean = X_recovery_mean,
+                              X_home_care_mean = X_home_care_mean,
+                              X_hospital_mean = X_hospital_mean)
+  return(data_save_dat)
+}
+
+# Data generation function - individual data (for other EVSI methods)
+utility_datagen_fn_indiv <- function(inputs, n = 500){
   # Load the data
-  X_home_care <- X_hospital <- X_recovery <- matrix(NA, nrow = dim(inputs)[1], ncol = n[1])
-  X_recovery_mean1 <- X_recovery_mean2 <-  X_home_care_mean1 <- X_home_care_mean2 <-
-    X_hospital_mean1 <- X_hospital_mean2 <- vector("numeric", dim(inputs)[1])
-  for(i in 1:dim(inputs)[1]){
+  X_home_care <- X_hospital <- 
+    X_recovery <- matrix(NA, nrow = dim(inputs)[1], ncol = n[1])
+  for(i in 1:nrow(inputs)){
     set.seed(123 + i)
     m_recovery <- inputs[i, "u_recovery"]
     m_home_care <- inputs[i, "u_home_care"]
     m_hospital <- inputs[i, "u_hospital"]
-    sd_recovery <- sd_recovery_fun()
-    sd_home_care <- sd_home_care_fun()
-    sd_hospital <- sd_hospital_fun()
-    
+    sd_recovery <- inputs[i, "sd_iid_recovery"]
+    sd_home_care <- inputs[i, "sd_iid_home_care"]
+    sd_hospital <- inputs[i, "sd_iid_hospital"]
     # Simulate the costs 
-    X_recovery[i, ] <- truncnorm::rtruncnorm(n[1], mean = m_recovery, sd = sd_recovery,
+    X_recovery[i, ] <- truncnorm::rtruncnorm(n[1], mean = m_recovery, 
+                                             sd = sd_recovery,
                                              a = -Inf, b = 1)
-    X_home_care[i, ] <- truncnorm::rtruncnorm(n[1], mean = m_home_care, sd = sd_home_care,
+    X_home_care[i, ] <- truncnorm::rtruncnorm(n[1], mean = m_home_care, 
+                                              sd = sd_home_care,
                                               a = -Inf, b = 1)
-    X_hospital[i, ] <- truncnorm::rtruncnorm(n[1], mean = m_hospital, sd = sd_hospital,
-                                             a = -Inf, b = 1)  }
-  
+    X_hospital[i, ] <- truncnorm::rtruncnorm(n[1], mean = m_hospital, 
+                                             sd = sd_hospital,
+                                             a = -Inf, b = 1)
+  }
   data_save_dat <- data.frame(cbind(X_recovery = X_recovery,
                                     X_home_care = X_home_care,
                                     X_hospital = X_hospital))
   return(data_save_dat)
 }
 
-
 # Analysis function based on JAGS
 utility_analysis_fn <- function(data, args, pars){
   # Create the data list for JAGS
-  data_jags <- list(X_recovery = as.vector(as.matrix(data[, (1:args$n)])),
-                    X_home_care = as.vector(as.matrix(data[, args$n + (1:args$n)])),
-                    X_hospital = as.vector(as.matrix(data[, 2*args$n + (1:args$n)])),
+  recovery_idx <- (1:args$n)
+  home_care_idx <- args$n + (1:args$n)
+  hospital_idx <- 2*args$n + (1:args$n)
+  
+  data_jags <- list(X_recovery = as.vector(as.matrix(data[, recovery_idx])),
+                    X_home_care = as.vector(as.matrix(data[, home_care_idx])),
+                    X_hospital = as.vector(as.matrix(data[, hospital_idx])),
                     n = args$n,
                     alpha_recovery = args$betaPar(
                       args$u_recovery_mu,
@@ -557,11 +579,11 @@ utility_analysis_fn <- function(data, args, pars){
                       args$u_hospital_sd
                     )$beta)
   
-  trial <- function(){
+  trial <- "model{
     for(i in 1:n){
-      X_recovery[i] ~ dnorm(u_recovery, tau_recovery);T(, 1)
-      X_home_care[i] ~ dnorm(u_home_care, tau_home_care);T(, 1)
-      X_hospital[i] ~ dnorm(u_hospital, tau_hospital);T(, 1)
+      X_recovery[i] ~ dnorm(u_recovery, tau_recovery) T(, 1)
+      X_home_care[i] ~ dnorm(u_home_care, tau_home_care) T(, 1)
+      X_hospital[i] ~ dnorm(u_hospital, tau_hospital) T(, 1)
     }
     
     u_recovery ~ dbeta(alpha_recovery, beta_recovery)
@@ -576,9 +598,10 @@ utility_analysis_fn <- function(data, args, pars){
     tau_home_care <- 1 / sd_home_care ^ 2
     tau_hospital <- 1 / sd_hospital ^ 2
   }
+  "
   
   filein <- file.path(tempdir(),fileext="datmodel.txt")
-  R2OpenBUGS::write.model(trial,filein)
+  cat(trial, file=filein)
   
   # Perform the MCMC simulation with OpenBUGS.
   # Close OpenBUGS once it has finished (if debug is set to TRUE)
@@ -591,18 +614,30 @@ utility_analysis_fn <- function(data, args, pars){
     n.thin = 1, 
     n.burnin = 250, progress.bar = "none") 
   
-  return(data.frame(u_recovery = bugs.data$BUGSoutput$sims.matrix[, "u_recovery"],
-                    u_home_care = bugs.data$BUGSoutput$sims.matrix[, "u_home_care"],
-                    u_hospital = bugs.data$BUGSoutput$sims.matrix[, "u_hospital"]))
+  u_recovery <- bugs.data$BUGSoutput$sims.matrix[, "u_recovery"]
+  u_home_care <- bugs.data$BUGSoutput$sims.matrix[, "u_home_care"]
+  u_hospital <- bugs.data$BUGSoutput$sims.matrix[, "u_hospital"]
+  
+  return(data.frame(u_recovery = u_recovery,
+                    u_home_care = u_home_care,
+                    u_hospital = u_hospital))
 }
+
+# Add individual level variation parameters
+m_params$sd_iid_recovery <- runif(nrow(m_params), 0.000001, 0.15)
+m_params$sd_iid_home_care <- runif(nrow(m_params), 0.000001, 0.6)
+m_params$sd_iid_hospital <- runif(nrow(m_params), 0.000001, 0.4)
 
 # EVSI calculation using the momemt matching method.
 evsi_utility <- evsi(outputs = chemotherapy_output,
                      inputs = m_params,
                      pars = c("u_recovery", "u_home_care", "u_hospital"),
+                     pars_datagen = c("u_recovery", "u_home_care", "u_hospital",
+                                      "sd_iid_recovery", "sd_iid_home_care",
+                                      "sd_iid_hospital"),
                      n = seq(20, 300, by = 10),
                      method = "mm",
-                     datagen_fn = utility_datagen_fn,
+                     datagen_fn = utility_datagen_fn_indiv,
                      model_fn = calculate_costs_effects,
                      analysis_args = list(n = 20,
                                           betaPar = betaPar,
@@ -617,8 +652,9 @@ evsi_utility <- evsi(outputs = chemotherapy_output,
                      par_fn = generate_psa_parameters,
                      Q = 50)
 
-plotting_6 <- evsi.plot.adapt(chemotherapy_output, m_params, c("u_recovery", "u_home_care", "u_hospital"), 
-                            evsi_utility, "gam")
+plotting_6 <- evsi.plot.adapt(chemotherapy_output, m_params, 
+                              c("u_recovery", "u_home_care", "u_hospital"),
+                              evsi_utility, "gam")
 
 pdf("06_figs/EVSI_WTP_U_MM.pdf")
 evsi.wtp.plot(plotting_6)
@@ -649,7 +685,8 @@ dev.off()
 #### STUDY 3: Long-term Survival ####
 longterm_datagen_fn <- function(inputs, n = 46000){
   rate_longterm <- inputs[, "rate_longterm"]
-  sum_of_surv <- rgamma(dim(inputs)[1], shape = 2 * n, scale = n / rate_longterm)
+  sum_of_surv <- rgamma(dim(inputs)[1], shape = 2 * n, 
+                        scale = n / rate_longterm)
   return(data.frame(surv_sum = sum_of_surv))
 }
 
@@ -676,10 +713,7 @@ ENBS.fun(evsi_longterm %>% filter(k %in% c(20000, 25000, 30000)),
          cost=c(60000, 60000), Pop = pop.adjust, Time = 9.5, Dis = 0.035
 )
 
-optim.ss(plotting, c(60000, 60000), c(0, 0), 
-         k = 30000, Pop = pop.adjust, Time = 9.5)
-
 pdf("06_figs/EVSI_LT_Prob.pdf")
-evsi.prob.plot(plotting, c(60000, 60000), c(0, 0),
+evsi.prob.plot(plotting_7, c(60000, 60000), c(0, 0),
                k = 20000, Pop = c(0, pop.adjust * 2), Time = c(0, 15))
 dev.off()

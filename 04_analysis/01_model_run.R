@@ -27,7 +27,7 @@ for(s in 1:n_psa_size){
 dimnames(m_costs_effects)[2:3] <- dimnames(
   do.call(calculate_costs_effects,
           v_params[names(formals(calculate_costs_effects))])
-  )[2:3]
+  )
 
 # Estimate net benefit for different willingness-to-pay values
 n_wtp <- 51
