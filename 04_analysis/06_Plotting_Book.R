@@ -503,9 +503,9 @@ evsi.enbs.plot(plotting_4, c(1260000, 1400000), 2 * c(1560.55, 1600),
                legend = F)
 
 points(plotting_3$attrib$N, ENBS_RB, type = "l",
-       lty = 3)
-legend(y =4.6e07, x = 950, c("Moment Matching", "Regression Based"), lty = c(1,3), 
-       lwd = c(2,1), box.lwd = 0, 
+       lty = 2, lwd = 2)
+legend(y =5.2e07, x = 950, c("Moment Matching", "Regression Based"), lty = c(1,2), 
+       lwd = c(2,2), box.lwd = 0, 
        box.col = "white", bg = "white")
 
 dev.off()

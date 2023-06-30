@@ -67,29 +67,34 @@ EVPI <- EVPI %>%
   mutate(pars = "all_parameters")
 names(EVPI) <- c("k", "evppi", "pars")
 
-pdf("06_figs/EVPPI_WTP.pdf",width=6,height=4)
+
 ev_single %>% rbind(EVPI) %>%
   filter(pars %in%c("logor_side_effects",
                     "u_home_care",
                     "rate_longterm",
                     "lambda_hosp",
                     "all_parameters")) %>%
-  ggplot(aes(x=k, y=evppi, group=pars, linetype = pars)) +
-  geom_line() + 
+  ggplot(aes(x=k, y=evppi, group=pars, linetype = pars, size = pars)) +
+  geom_line()+
+  scale_size_manual(values = c(1.5, 0.5, 
+                                0.5, 0.5,0.5),
+                    guide = "none") + 
   theme_bw() + 
   theme(legend.position = "bottom") +
   xlab("Willingness-to-Pay") + 
   ylab("Value of Information") +
   labs(linetype = "Parameters") +
-  scale_linetype_manual(values = c("longdash", "dashed", "dotted","dotdash", "solid"),
+  scale_linetype_manual(values = c("longdash", "solid", "dotted","dotdash", "solid"),
                         breaks = c("logor_side_effects",
                                    "u_home_care",
                                    "rate_longterm",
                                    "lambda_hosp",
                                    "all_parameters"),
                         labels = c("Log odds ratio", "Home care utility", "Long term death rate",
-                                   "Lambda for hospitalisation", "EVPI"))
-dev.off()
+                                   "Lambda for hospitalisation", "EVPI"))+
+  guides(linetype = guide_legend(override.aes = list(size = c(0.5, 0.5, 
+                                                              0.5, 0.5, 1.5))))
+ggsave("06_figs/EVPPI_WTP.pdf", height = 5.86, width = 8)
 
 
 ## EVPPI Groups
@@ -150,23 +155,28 @@ ev_groups %>% rbind(EVPI) %>%
                      "side_effects_and_follow_up",
                      "utilities",
                      "trans_probs")) %>%
-  ggplot(aes(x=k, y=evppi, group=pars, linetype = pars)) +
-  geom_line() + 
+  ggplot(aes(x=k, y=evppi, group=pars, size = pars, linetype = pars)) +
+  geom_line() +
+  scale_size_manual(values = c(1.5, 0.5, 
+                               0.5, 0.5,0.5),
+                    guide = "none") + 
   theme_bw() + 
   theme(legend.position = "bottom") +
   xlab("Willingness-to-Pay") + 
   ylab("Value of Information") +
   labs(linetype = "Studies") +
-  scale_linetype_manual(values = c("longdash", "dashed", "dotted","dotdash", "solid"),
+  scale_linetype_manual(values = c("longdash", "solid", "dotted","dotdash", "solid"),
                         breaks = c("side_effects",
                                    "side_effects_and_follow_up",
                                    "utilities",
                                    "trans_probs", "all_parameters"),
                         labels = c("Side effects", "Side effects and follow up", 
                                    "Utilities",
-                                   "Transition probabilities", "EVPI"))
+                                   "Transition probabilities", "EVPI")) +
+  guides(linetype = guide_legend(override.aes = list(size = c(0.5, 0.5, 
+                                                              0.5, 0.5, 1.5))))
 
-ggsave("06_figs/EVPPI_groups.pdf")
+ggsave("06_figs/EVPPI_groups.pdf", height = 5.86, width = 8)
 
 ## Population Level EVPPI
 pop_size <- 46000 * c(sum(1 / (1 + 0.035)^(0:5)),
