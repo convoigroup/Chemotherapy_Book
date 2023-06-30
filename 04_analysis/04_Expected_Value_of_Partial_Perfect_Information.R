@@ -45,14 +45,14 @@ ev_single %>%
   mutate(evppi = round(evppi, 2))
 
 # Plot key parameters
+pdf("06_figs/EVPPI_ICER.pdf", width=6, height=4)
 ev_single %>%
   filter(k == wtp.max) %>%
   mutate(pars = fct_reorder(pars, (evppi))) %>%
   ggplot(mapping = aes(evppi, pars)) +
   geom_point() + 
   xlab("EVPPI") + ylab("Model Parameters")
-
-ggsave("06_figs/EVPPI_ICER.pdf")
+dev.off()
 
 
 ## Calculate standard errors
@@ -67,6 +67,7 @@ EVPI <- EVPI %>%
   mutate(pars = "all_parameters")
 names(EVPI) <- c("k", "evppi", "pars")
 
+pdf("06_figs/EVPPI_WTP.pdf",width=6,height=4)
 ev_single %>% rbind(EVPI) %>%
   filter(pars %in%c("logor_side_effects",
                     "u_home_care",
@@ -88,8 +89,8 @@ ev_single %>% rbind(EVPI) %>%
                                    "all_parameters"),
                         labels = c("Log odds ratio", "Home care utility", "Long term death rate",
                                    "Lambda for hospitalisation", "EVPI"))
+dev.off()
 
-ggsave("06_figs/EVPPI_WTP.pdf")
 
 ## EVPPI Groups
 # Randomised Trial
@@ -108,13 +109,14 @@ ev_RCT %>%
   filter(k == wtp.max) 
 
 # Explore across willingness to pay
+pdf("06_figs/EVPPI_RCT.pdf", width=5, height=3)
 ev_RCT %>%
   ggplot(aes(x=k, y=evppi, group=pars, col = pars)) +
   geom_line() + 
   geom_line(data = EVPI, aes(x = k, y = evpi), linetype = "dashed") + 
   theme_bw()
+dev.off()
 
-ggsave("06_figs/EVPPI_RCT.pdf")
 
 # All Studies
 par_groups <- list(

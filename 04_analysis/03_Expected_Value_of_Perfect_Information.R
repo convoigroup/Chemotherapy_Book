@@ -11,8 +11,10 @@ source("04_analysis/01_model_run.R")
 ## Expected Value of Perfect Information - single WTP
 # Specify willingness to pay
 wtp_fix = 20000
+# Extract net benefit for this particular WTP
+nb <- m_net_benefit[ , , wtp_seq == wtp_fix]
 # Calculate EVPI from net benefit
-evpi(m_net_benefit[ , , wtp_seq == wtp_fix])
+evpi(nb)
 
 ## Baseline Cost-Effectiveness Formatting
 # The output from the cost-effectiveness model should be formatted for 
