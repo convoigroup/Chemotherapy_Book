@@ -1,0 +1,65 @@
+# Data Collection for the Treatment Effect Size (OR)
+
+# Load model and EVSI methods scripts from https://github.com/convoigroup/EVSIExample/find/master
+
+source("C:/Users/jongw/OneDrive/Desktop/EVSI Files/EVSI Example/My files/Andes//Regression_Based.R")
+
+
+decision_model_cea <- list(cost=cost,                       # Define inputs for EVSI function: CEA.
+                           effect=utility,
+                           wtp=250000)
+
+decision_model_psa <- theta                                 # Define inputs for EVSI function: PSA.
+
+data_generation_function <- function(n, theta, st, sc){     # Generate data for new study with "st" sample in 
+                                                            #  treatment group (SK) and "sc" in control (CT) by
+                                                            #  drawing binomial samples.
+  Dcmi <- rbinom(1, n, theta$Pcmi)                 
+  Dsmi <- rbinom(1, n, theta$Psmi)                    
+  
+  ################################ In this example ####################### 
+  
+  st <-1111                                               # Let's say the plan is to include 1111 participants in 
+                                                          #   the treatment group, SK. 
+  sc <-889                                                # And, the plan is to include 889 participants in 
+                                                          #   the control group, CT. 
+  
+  mean.OR <- log(Dsmi/(st-Dsmi)/(Dcmi/(sc-Dcmi)))         # calculate log(OR) in new study
+  var.OR <- 1/Dcmi+1/(sc-Dcmi)+1/Dsmi+1/(st-Dsmi)         # Calculate variance of log(OR)
+  
+  if(Dcmi==0 | Dsmi==0){                                  # Standard zero cell corrections
+    mean.OR <- log((Dsmi+0.5)/((st+1)-Dsmi)/((Dcmi+0.5)/((sc+1)-Dcmi)))
+    var.OR <- 1.5/(1+Dcmi)+1/(sc-Dcmi)+1.5/(1+Dsmi)+1/(st-Dsmi)
+  }
+  
+  mean.pr <- -0.3883                                  # prior log(OR)
+  var.pr <- 1/4                                       # prior variance of log(OR)
+  
+  # Update the prior with the new sample to obtain parameters of the posterior distribution
+  
+  var.post <- 1/(1/var.OR+1/var.pr)                               # Variance of posterior log(OR)
+  mean.post <- (1/(var.OR)*mean.OR+mean.pr*(1/var.pr))*var.post   # Posterior log(OR)
+  
+  OR.post <- mean(exp(rnorm(1000, mean.post, sqrt(var.post))))    # Calculate posterior mean OR
+  
+  # Output simulated data and its summary statistics
+  
+  D <- list()                                              
+  
+  D$simulated_data <- list("Dcmi"=Dcmi, "Dsmi"=Dsmi,        # Output simulated data
+                           "OR"=OR.post)
+  
+  D$summary_statistics <- D$simulated_data                  # Output summary statistics
+  
+  return(D)
+}
+
+evsi_specification <- list(gam_parameters=c("OR"),
+                           gam_tensor_prod_dim=NA,
+                           outer_cond_exp_loop_size=10000,
+                           sim_data_size=c(1111))            # Should this be 1111? or 2000?
+
+evsi_regression_based(decision_model_cea,
+                      decision_model_psa,
+                      data_generation_function,
+                      evsi_specification)
