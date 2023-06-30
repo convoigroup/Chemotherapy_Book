@@ -39,7 +39,7 @@ plot(wtp_seq, m_ceaf[, 2], type = "l", lwd = 3,
      xlab = "Willingness-to-pay",
      ylab = "Probability of Cost Effectiveness",
      main = "Cost Effectiveness Acceptability Frontier")
-points(wtp_seq, m_ceaf[, 1], type = "l", col = colours[7], lwd = 3)
+points(wtp_seq, m_ceaf[, 1], type = "l", col = colours[7], lwd = 3, lty = 2)
 
 v_optimal_treatment <- apply(apply(m_net_benefit, c(2,3), mean), 2, which.max)
 v_ceaf <- vector(length = n_wtp)
@@ -49,8 +49,8 @@ for(i in 1:n_wtp){
 
 points(wtp_seq, v_ceaf, pch = 19, cex = 0.5)
 points(wtp_seq, v_ceaf, pch = 0)
-legend("bottomright", c("Treatment 1", "Treatment 2", "Frontier"),
-       lwd = c(2, 2, NA), pch = c(NA, NA, 0),
+legend("right", c("Novel Intevention", "Standard Care", "Frontier"),
+       lwd = c(2, 2, NA), pch = c(NA, NA, 0), lty = c(1, 2, NA),
        col = c(colours[1], colours[7], "black"))
 dev.off()
 

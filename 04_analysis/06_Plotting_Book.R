@@ -124,7 +124,8 @@ dev.off()
 
 pdf("06_figs/ENBS.pdf")
 evsi.enbs.plot(plotting_1, c(5e6, 1e7), c(28000,42000), 
-               k = 20000, Pop = 46000, Time = 10)
+               k = 20000, Pop = 46000, Time = 5,
+               pos = "topright")
 dev.off()
 optim.ss(plotting_1, mean(c(5e6, 1e7)), mean(c(28000,42000)), 
          k = 20000, Pop = 46000, Time = 10)
@@ -172,7 +173,8 @@ dev.off()
 pop.adjust <- 46000 * (1 / (1 + 0.035)^3)
 pdf("06_figs/ENBS_SE.pdf")
 evsi.enbs.plot(plotting_2, c(1260000, 1400000), 2 * c(1560.55, 1600), 
-               k = 20000, Pop = pop.adjust, Time = 7)
+               k = 20000, Pop = pop.adjust, Time = 7,
+               legend = FALSE)
 dev.off()
 
 optim.ss(plotting_2, c(1260000, 1400000), 2 * c(1560.55, 1600), 
@@ -271,7 +273,8 @@ plotting_3 <- evsi.plot.adapt(chemotherapy_output, m_params, c("logor_side_effec
 pop.adjust <- 46000 * (1 / (1 + 0.035)^3)
 pdf("06_figs/ENBS_SEFU.pdf")
 evsi.enbs.plot(plotting_3, c(1260000, 1400000), 2 * c(1560.55, 1600), 
-               k = 20000, Pop = pop.adjust, Time = 7)
+               k = 20000, Pop = pop.adjust, Time = 7,
+               legend = FALSE)
 dev.off()
 
 optim.ss(plotting_3, c(1260000, 1400000), 2 * c(1560.55, 1600), 
@@ -662,7 +665,7 @@ dev.off()
 pop.adjust <- 46000 * (1 / (1 + 0.035)^2)
 pdf("06_figs/ENBS_U_MM.pdf")
 evsi.enbs.plot(plotting_6, c(90000, 95000), 3 * c(370-25, 370), 
-               k = 20000, Pop = pop.adjust, Time = 8)
+               k = 20000, Pop = pop.adjust, Time = 8, legend = FALSE)
 dev.off()
 
 

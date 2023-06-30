@@ -28,7 +28,7 @@ evpi.plot <- ggplot(EVPI, aes(x=k, y=evpi)) +
 wtp.max <- chemotherapy_output$k[
   which.min(abs(chemotherapy_output$k - ICER))
 ]
-EVPI[EVPI$k == 20000, , ]
+EVPI[EVPI$k == wtp.max, , ]
 
 ## Single parameter EVPPI
 # Perform the calculations to determine the EVPPI for all parameters at all WTP
@@ -65,22 +65,29 @@ ev_small_se
 # Plot key parameters across WTP
 EVPI <- EVPI %>%
   mutate(pars = "all_parameters")
+names(EVPI) <- c("k", "evppi", "pars")
 
-ev_single %>%
+ev_single %>% rbind(EVPI) %>%
   filter(pars %in%c("logor_side_effects",
                     "u_home_care",
-                    "p_died",
                     "rate_longterm",
-                    "p_side_effects_t1",
-                    "p_hospitalised_total",
-                    "lambda_hosp")) %>%
-  ggplot(aes(x=k, y=evppi, group=pars, col = pars)) +
+                    "lambda_hosp",
+                    "all_parameters")) %>%
+  ggplot(aes(x=k, y=evppi, group=pars, linetype = pars)) +
   geom_line() + 
-  geom_line(data = EVPI, aes(x = k, y = evpi), linetype = "dashed") + 
-  theme_bw() +
+  theme_bw() + 
+  theme(legend.position = "bottom") +
   xlab("Willingness-to-Pay") + 
   ylab("Value of Information") +
-  labs(color = "Parameters")
+  labs(linetype = "Parameters") +
+  scale_linetype_manual(values = c("longdash", "dashed", "dotted","dotdash", "solid"),
+                        breaks = c("logor_side_effects",
+                                   "u_home_care",
+                                   "rate_longterm",
+                                   "lambda_hosp",
+                                   "all_parameters"),
+                        labels = c("Log odds ratio", "Home care utility", "Long term death rate",
+                                   "Lambda for hospitalisation", "EVPI"))
 
 ggsave("06_figs/EVPPI_WTP.pdf")
 
@@ -136,11 +143,26 @@ ev_groups %>%
   plot(order = TRUE)
 
 # Plot all groups across WTP
-ev_groups %>%
-  ggplot(aes(x=k, y=evppi, group=pars, col = pars)) +
+ev_groups %>% rbind(EVPI) %>%
+  filter(pars %in% c("all_parameters", "side_effects",
+                     "side_effects_and_follow_up",
+                     "utilities",
+                     "trans_probs")) %>%
+  ggplot(aes(x=k, y=evppi, group=pars, linetype = pars)) +
   geom_line() + 
-  geom_line(data = EVPI, aes(x = k, y = evpi), linetype = "dashed") + 
-  theme_bw()
+  theme_bw() + 
+  theme(legend.position = "bottom") +
+  xlab("Willingness-to-Pay") + 
+  ylab("Value of Information") +
+  labs(linetype = "Studies") +
+  scale_linetype_manual(values = c("longdash", "dashed", "dotted","dotdash", "solid"),
+                        breaks = c("side_effects",
+                                   "side_effects_and_follow_up",
+                                   "utilities",
+                                   "trans_probs", "all_parameters"),
+                        labels = c("Side effects", "Side effects and follow up", 
+                                   "Utilities",
+                                   "Transition probabilities", "EVPI"))
 
 ggsave("06_figs/EVPPI_groups.pdf")
 

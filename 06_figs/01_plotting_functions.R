@@ -60,16 +60,22 @@ evsi.wtp.plot <- function (evsi, pos = c(0, 0.8), N = NULL)
   }
 
   EVSI <- evsi$evsi[select, -1]
+  x.range <- range(range(evsi$evpi$k), range(evsi$evppi$k), 
+                   range(evsi$attrib$k))
+  x.range[2] <- x.range[2] * 1.05
+                   
   plot(evsi$evpi$k, evsi$evpi$evpi, t = "l", xlab = "Willingness to pay", 
        ylab = "", main = "Expected Value of Sample Information", 
        lwd = 2, ylim = range(range(evsi$evpi$evpi), range(evsi$evppi$evppi), 
                              range(EVSI)),
-       xlim = range(range(evsi$evpi$k), range(evsi$evppi$k), 
-                    range(evsi$attrib$k)),
+       xlim = x.range,
   col = "black")
     points(evsi$evppi$k, evsi$evppi$evppi, t = "l", col = "black", 
            lty = 1)
-    colours <- colorRampPalette(colors = c("skyblue", "blue", "darkblue"))(select.length)
+    
+    text(evsi$evpi$k[length(evsi$evpi$k)], evsi$evpi$evpi[length(evsi$evpi$k)], "EVPI", pos = 4,cex = 0.8)
+    text(evsi$evppi$k[length(evsi$evppi$k)], evsi$evppi$evppi[length(evsi$evppi$k)], "EVPPI", pos = 4, cex = 0.8)
+    colours <- colorRampPalette(colors = c("grey90", "grey60", "grey20"))(select.length)
     if (length(evsi$attrib$k) < 30) {
       for (s in 1:select.length) {
         points(evsi$attrib$k, EVSI[s, ], pch = 19, col = colours[s])
@@ -149,8 +155,8 @@ evsi.ss.plot <- function (evsi, k = NULL, pos = c("bottomright"))
              lty = 1)
   }
   
-  abline(h = evppi, col = "springgreen", lwd = 3, lty = 2)
-  legend(alt.legend, c("EVSI", "EVPPI"), col = c("black", "springgreen"), 
+  abline(h = evppi, col = "darkgray", lwd = 3, lty = 2)
+  legend(alt.legend, c("EVSI", "EVPPI"), col = c("black", "darkgray"), 
          lwd = c(2,3), lty = c(1,2), box.lwd = 0, 
          box.col = "white", bg = "white")
   box()
@@ -171,7 +177,7 @@ ENBS.sd.calc <- function(evsi.sd, Pop, Time, Dis, cost.sd) {
 }
 
 ### Plots the probability of a cost-effective trial as a sentivity analysis
-### to time horizon and population size. Originally plot.prob.ce in EVSI package
+### to decision horizon and population size. Originally plot.prob.ce in EVSI package
 evsi.prob.plot <- function (evsi, trial.cost = NULL, setup = NULL, pp = NULL, 
           Pop = c(0, 10000), Time = c(1, 20), Dis = 0.035, k = NULL, N = NULL, 
           pos = c("topright")) 
@@ -239,8 +245,8 @@ evsi.prob.plot <- function (evsi, trial.cost = NULL, setup = NULL, pp = NULL,
     trial.cost <- c(setup.params[1] + pp.params[1] * N, sqrt(setup.params[2]^2 + 
                                                                N^2 * pp.params[2]^2))
   }
-  colours <- colorRampPalette(c("black", "navy", "blue", "skyblue", 
-                                       "aliceblue", "white"))(100)
+  colours <- colorRampPalette(c("black", "grey20", "grey40", "grey60", 
+                                       "grey90", "white"))(100)
 
                                        if (class(trial.cost) == "numeric") {
                                          if (length(trial.cost) == 1) {
@@ -270,7 +276,7 @@ evsi.prob.plot <- function (evsi, trial.cost = NULL, setup = NULL, pp = NULL,
                                          }
                                        }
                                        image(x = Time.seq, y = Pop.seq, z = Prob.mat, col = colours, 
-                                             main = "Probability of Cost-Effective Trial", xlab = "Time Horizon", 
+                                             main = "Probability of Cost-Effective Trial", xlab = "Decision Horizon", 
                                              ylab = "Incidence Population", xlim = c(Time.min, Time.max), 
                                              ylim = c(Pop.min, Pop.max), breaks = seq(0, 1, length.out = 101))
                                        legend(alt.legend, c("Prob=0", rep(NA, 98/2), "Prob=.5", 
@@ -334,7 +340,7 @@ optim.ss <- function (evsi, setup, pp, Pop, Time, k = NULL, Dis = 0.035)
   return(list(SS.max = N.max, ENBS = ENBS.max, SS.I = N.range))
 }
 
-### Plots ENBS across sample size for fixed WTP/population size and time horizon
+### Plots ENBS across sample size for fixed WTP/population size and decision horizon
 ### Originally plot.enbs in EVSI package
 evsi.enbs.plot <- function (evsi, setup, pp, Pop = 10000, Time = 10, 
                             Dis = 0.035, k = NULL, N = NULL, pos = c("bottomright"),
@@ -395,8 +401,7 @@ evsi.enbs.plot <- function (evsi, setup, pp, Pop = 10000, Time = 10,
     trial.cost[i, ] <- c(setup.params[1] + pp.params[1] * 
                            N[i], sqrt(setup.params[2]^2 + N[i]^2 * pp.params[2]^2))
   }
-  colours <- colorRampPalette(c("black", "navy", "blue", "skyblue", 
-                                       "aliceblue", "white"))(100)
+  colours <- colorRampPalette(c("black", "grey20", "grey40", "grey60", "grey90", "white"))(100)
                                        ENBS.mat <- array(NA, dim = c(length.N, 5))
                                        for (j in 1:length.N) {
                                          ENBS.mean <- ENBS.fun(evsi.params[j, 1], Pop, Time, Dis, 
@@ -433,7 +438,7 @@ evsi.enbs.plot <- function (evsi, setup, pp, Pop = 10000, Time = 10,
                                            points(N, ENBS.mat[, l], type = "l", lwd = lwd[l])
                                          }
                                          legend(alt.legend, c(as.character(prob), "ENBS=0"), 
-                                                col = c(rep("black", length.prob), "springgreen"), 
+                                                col = c(rep("black", length.prob), "darkgray"), 
                                                 lwd = lwd, box.lwd = 0, pch = 19,
                                                 box.col = "white", bg = "white")
                                        }
@@ -444,11 +449,11 @@ evsi.enbs.plot <- function (evsi, setup, pp, Pop = 10000, Time = 10,
                                          }
                                          if(legend){
                                          legend(alt.legend, c(as.character(prob), "ENBS=0"), col = c(rep("black", 
-                                                                                                                length.prob), "springgreen"), lwd = lwd, lty = lty, box.lwd = 0, 
+                                                                                                                length.prob), "darkgray"), lwd = lwd, lty = lty, box.lwd = 0, 
                                                 box.col = "white", bg = "white")
                                          }
                                        }
-                                       abline(h = 0, col = "springgreen", lwd = lwd[length.prob + 
+                                       abline(h = 0, col = "darkgray", lwd = lwd[length.prob + 
                                                                                       1], lty = lty[length.prob + 1])
                                        
                                        box()

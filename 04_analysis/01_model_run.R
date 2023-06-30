@@ -6,7 +6,7 @@ set.seed(123)
 
 ### Load the Inputs
 source("02_data/01_data_inputs.R")
-source("02_data/02_Assumption_Inputs.R")
+source("02_data/02_assumption_inputs.R")
 
 ### Load the Functions
 source("03_R/01_misc_functions.R")
